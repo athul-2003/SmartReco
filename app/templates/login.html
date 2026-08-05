@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Log in — SmartReco{% endblock %}
+{% block content %}
+<h1>Log in</h1>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+<form action="/login" method="post" class="auth-form">
+  <label>Email
+    <input type="email" name="email" required autofocus>
+  </label>
+  <label>Password
+    <input type="password" name="password" required>
+  </label>
+  <button type="submit">Log in</button>
+</form>
+<p>Don't have an account? <a href="/register">Register</a></p>
+{% endblock %}

@@ -16,12 +16,20 @@ Installer tool: `library-skills` (run via `uvx`, so no separate install step). I
 Run from the repo root, once `fastapi` and `sqlmodel` are real dependencies (i.e. from Phase 1 of `docs/BUILD_PLAN.md` onward):
 
 ```bash
-uvx library-skills --claude
+uvx library-skills --claude --all --yes
 ```
 
-The `--claude` flag installs non-interactively into `.claude/skills/` (Claude Code's expected location — Claude Code doesn't use the generic `.agents/` directory other tools default to).
+The `--claude` flag installs into `.claude/skills/` (Claude Code's expected location, alongside the generic `.agents/skills/` other tools use). `--all --yes` skips the interactive picker, which doesn't render in a non-TTY/CI shell.
 
-**Re-run this any time `fastapi` or `sqlmodel` is upgraded**, so the installed skill content stays aligned with the version actually in use.
+**Windows note:** creating the skills as symlinks requires a privilege Windows doesn't grant by default (Developer Mode or admin). If you hit `WinError 1314`, add `--copy` to install real file copies instead:
+
+```bash
+uvx library-skills --claude --all --yes --copy
+```
+
+The trade-off: copied files don't auto-update when `fastapi`/`sqlmodel` is upgraded (symlinks would) — **re-run this command any time either is upgraded**, on any OS, so installed content stays aligned with the version actually in use.
+
+Installed skills are **not committed** — `.agents/` and `.claude/skills/` are gitignored, since they're fully regenerated from installed packages via the command above (same reasoning as not committing `.venv/`).
 
 ## What this enables
 

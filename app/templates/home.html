@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}SmartReco{% endblock %}
+{% block content %}
+<h1>Welcome to SmartReco</h1>
+{% if user %}
+  <p>You're logged in as {{ user.email }}. The course catalog and your personalized recommendations land here in later phases.</p>
+{% else %}
+  <p>A behavioral AI recommendation agent for course discovery — grounded in a real catalog, never invented.</p>
+  <p><a href="/register">Create an account</a> or <a href="/login">log in</a> to get started.</p>
+{% endif %}
+{% endblock %}

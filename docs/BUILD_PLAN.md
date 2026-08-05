@@ -31,21 +31,31 @@ Where the SRS left a decision open, it's resolved below (marked **Decision**) so
 **Goal:** A running FastAPI app with auth, roles, and a page shell — no business features yet.
 
 **Tasks**
-- [ ] Project structure per README (`app/`, `models/`, `schemas/`, `routers/`, `services/`, `templates/`, `static/`)
-- [ ] `config.py` — pydantic-settings reading `.env` (`MESH_API_KEY`, `DATABASE_URL`, session secret)
-- [ ] `db.py` — SQLModel engine/session (SQLAlchemy under the hood), SQLite by default
-- [ ] `models/user.py` — `users` SQLModel table (FR-1)
-- [ ] Auth: register/login/logout via `passlib[bcrypt]`; session via Starlette `SessionMiddleware` (signed cookie — no separate session table needed for a solo build)
-- [ ] Role enforcement dependency (`user` vs `admin`) for route protection
-- [ ] Minimal Jinja2 base template + nav
-- [ ] Once `fastapi`/`sqlmodel` are added as dependencies, run `uvx library-skills --claude` to install their official AI agent skills into `.claude/skills/` (see [`AGENTS.md`](../AGENTS.md))
+- [x] Project structure per README (`app/`, `models/`, `routers/`, `services/`, `templates/`, `static/`) — `schemas/` deferred until a JSON API actually needs one (Phase 3); forms cover Phase 1's needs directly via FastAPI `Form(...)` params
+- [x] `config.py` — pydantic-settings reading `.env` (`MESH_API_KEY`, `DATABASE_URL`, session secret, and the rest of `.env.example`)
+- [x] `db.py` — SQLModel engine/session (SQLAlchemy under the hood), SQLite by default
+- [x] `models/user.py` — `users` SQLModel table (FR-1)
+- [x] Auth: register/login/logout via `passlib[bcrypt]`; session via Starlette `SessionMiddleware` (signed cookie — no separate session table needed for a solo build)
+- [x] Role enforcement dependency (`user` vs `admin`) for route protection — `require_login`/`require_admin` in `app/services/auth.py`
+- [x] Minimal Jinja2 base template + nav
+- [x] Once `fastapi`/`sqlmodel` are added as dependencies, run `uvx library-skills --claude` to install their official AI agent skills into `.claude/skills/` (see [`AGENTS.md`](../AGENTS.md))
+- [x] `Dockerfile` — containerize the FastAPI app (uv-based build)
+- [x] `docker-compose.yml` — orchestrates the app + Qdrant (brought forward from Phase 2, since both are needed for a one-command dev environment) with a named volume for Qdrant storage and a bind-mounted SQLite data dir
+- [x] `.dockerignore`
+- [x] `Makefile` — standard entry points (`install`, `run`, `test`, `lint`, `fmt`, `docker-build`, `docker-up`, `docker-down`, `docker-logs`, `seed`, `clean`) so the project is runnable without memorizing `uv`/`docker compose` invocations
 
 **Decisions:**
 - Sessions are **signed-cookie based** (`SessionMiddleware`), not DB-backed — simplest option that satisfies FR-1.3 without an extra table.
 - ORM is **SQLModel**, not raw SQLAlchemy — one class serves as both the DB table and the Pydantic schema, still SQLite → Postgres via `DATABASE_URL`. Database access stays **synchronous** (SQLModel supports async, but sync is simpler and adequate at hackathon scale/demo reliability).
-- Adopted **Library Skills** (`AGENTS.md`) for FastAPI/SQLModel — official, version-synced coding-agent guidance bundled directly with those packages; installed into `.claude/skills/` and refreshed on every upgrade.
+- **Dockerized from Phase 1 onward**, not deferred to Phase 7 polish — the SRS explicitly values a frictionless "clone and run" reviewer experience (Sec. 2.1), and Qdrant already requires Docker for local dev (Sec 2.3/2.4), so wiring both the app and Qdrant into one `docker-compose.yml` now avoids doing this twice. The Qdrant service is defined now even though the app doesn't call it until Phase 2 — harmless to have running early.
+- **Makefile added as the standard run interface** — wraps `uv`/`docker compose` commands so setup is `make install && make run` (or `make docker-up` for the fully containerized path) rather than needing to know the underlying tool invocations.
+- Adopted **Library Skills** (`AGENTS.md`) for FastAPI/SQLModel — official, version-synced coding-agent guidance bundled directly with those packages; installed into `.claude/skills/` and refreshed on every upgrade. On Windows, symlink installation needs Developer Mode/admin (`WinError 1314`) — fall back to `--copy` (see `AGENTS.md`); installed skills are gitignored either way since they're regenerated from packages, not authored content.
+- **Pinned `bcrypt<4.1`** — `passlib[bcrypt]`'s version-detection breaks against bcrypt ≥4.1 (`ValueError: password cannot be longer than 72 bytes` during passlib's own self-test, a known upstream incompatibility since passlib is unmaintained). Pinning is the standard workaround; revisit if passlib ever ships a fix, or consider dropping passlib for direct `bcrypt` use if this recurs.
+- **Ruff configured with `extend-immutable-calls` for FastAPI's param functions** (`Depends`, `Query`, `Form`, etc.) — otherwise `ruff check` flags every dependency-injected route parameter as bug-prone (B008), which is a false positive for FastAPI's actual, required pattern. Documented, standard fix rather than scattering `# noqa` comments.
+- **GNU Make installed via `winget install ezwinports.make`** for local Windows use — the Makefile itself is portable (works as-is in CI/WSL/Mac/Linux); this was just making `make` available on this dev machine.
+**Definition of done:** ✅ Verified. Can register, log in, see a role-aware page, log out — confirmed via `pytest` (8/8 passing), manual curl flow, and browser-equivalent cookie-jar flow. `uv run uvicorn app.main:app --reload` serves it end to end. `docker compose build && docker compose up -d` also verified live: both containers start, `/`, `/admin` (redirects anonymous), and Qdrant's API all respond correctly, and a full register → session → home flow works against the containerized app with the SQLite file persisting correctly through the bind mount. `make lint`/`make test` confirmed working.
 
-**Definition of done:** can register, log in, see a role-aware page, log out. `uv run uvicorn app.main:app --reload` serves it end to end.
+**Phase 1 status: ✅ Complete.**
 
 ---
 
