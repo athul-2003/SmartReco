@@ -1,0 +1,19 @@
+# Auto-merged by `docker compose` whenever docker-compose.yml is (i.e. every
+# `make up`/`make up-build`) — Compose loads this file automatically, no -f
+# flag needed. This is the *local dev only* layer: it bind-mounts source code
+# over the built image and turns on uvicorn's autoreload, so edits to
+# app/**/*.py, templates, or static files take effect without a rebuild.
+#
+# Production runs should skip this file entirely: `make prod-up`/`make
+# prod-build` pass `-f docker-compose.yml` explicitly, which excludes it.
+services:
+  app:
+    volumes:
+      - ./app:/app/app
+      - ./scripts:/app/scripts
+    command:
+      [
+        "uv", "run", "--no-sync", "uvicorn", "app.main:app",
+        "--host", "0.0.0.0", "--port", "8000",
+        "--reload", "--reload-dir", "/app/app",
+      ]

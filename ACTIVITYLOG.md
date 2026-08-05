@@ -13,9 +13,9 @@ If this file ever conflicts with either of those on *what to build*, they win. T
 ## Current Status
 
 - **Last updated:** 2026-08-05
-- **Where things stand:** Phases 0–2 complete and merged to `main` (7 PRs total). The app runs via Docker Compose only (`make up-build`, `make seed`, `make create-admin`) — see `Makefile` / `make help`.
-- **Next up:** Phase 3 — Behavioral Tracking (per `docs/BUILD_PLAN.md`).
-- **Blocking on you:** the hackathon dashboard entry-submission form still isn't filled in — CI checks run and pass, but per the CI's own error, results aren't recorded until that form is submitted. Not urgent, but needed before final submission.
+- **Where things stand:** Phases 0–2 complete and merged to `main` (7 PRs total, plus uncommitted interim work — see below). SRS re-confirmed SQLModel as the ORM (docs already matched). A full design-system UI pass (Stitch-generated `docs/DESIGN.md`) has been applied across every Phase 1–2 template, plus Docker Compose hardening (healthchecks, non-root user, hot reload for dev, explicit prod path). None of the interim work below is committed yet — still sitting as uncommitted changes on `main`, pending your review/go-ahead to commit.
+- **Next up:** Phase 3 — Behavioral Tracking (per `docs/BUILD_PLAN.md`) — not started yet.
+- **Blocking on you:** the hackathon dashboard entry-submission form still isn't filled in — CI checks run and pass, but per the CI's own error, results aren't recorded until that form is submitted. Not urgent, but needed before final submission. Also: the interim UI/Docker work described below is uncommitted — say the word when you want it committed (and whether as one or several PRs).
 
 ---
 
@@ -80,3 +80,30 @@ Not phase-specific — still in force, and should keep being followed unless you
 
 ### 2026-08-05 — This file added
 - Created `ACTIVITYLOG.md` and wired the read/update instruction into `CLAUDE.md`, per your request, so context survives across separate chat windows.
+
+### 2026-08-05 — New SRS re-analysis (no `main` changes needed)
+- You uploaded an updated `docs/SmartReco_SRS.docx`. Re-read it and diffed against `README.md`/`docs/BUILD_PLAN.md`: the only real delta was the ORM (SQLAlchemy → SQLModel), which was **already** reflected everywhere (see the "SQLModel + AGENTS.md" entry above) — so this was a confirmation pass, not new work. Everything else in the new SRS matched what was already documented.
+
+### 2026-08-05 — Stitch UI design system rollout (uncommitted, before Phase 3)
+- You connected a Google Stitch MCP server (blocked by a confirmed, currently-open bug on Google's side — schema `$ref` resolution failure, corroborated by multiple public issue reports for other MCP clients too) — worked around it by you sharing exported screenshots directly instead.
+- Analyzed the sample design + your own `docs/DESIGN.md` (color/type/spacing tokens), then planned and implemented a full restyle of every Phase 1–2 template (`base.html`, auth pages, catalog browse/detail, admin) using those tokens — via `EnterPlanMode`, plan approved before implementing.
+- Solved two open design problems: (1) no product images in the dataset → deterministic tonal cover + monogram per product, generated from `category` (`app/services/ui.py`), no schema/seed change; (2) "My Recommendations" page can't be real before Phase 4's agent exists → added only the cold-start empty state now (`/recommendations`), flagged explicitly as scaffolding in `docs/BUILD_PLAN.md`, not a Phase 4 skip-ahead.
+- Also decided (with your sign-off via `AskUserQuestion`): dropped a "Skill Level" filter from the sample (not in the SRS schema), kept the sample's "AI Suggestion" box as a static placeholder, deferred match-percentage badges to Phase 4 (Qdrant already returns a real similarity score, so that can be genuine later, not fabricated).
+- Verified live end-to-end with Playwright screenshots against the real running Docker stack (not just template review) — all 5 key screens, real seeded catalog, real admin account.
+- Full details and all decisions: `docs/BUILD_PLAN.md`'s "Interim — Design System & UI Pass" section.
+
+### 2026-08-05 — UI follow-up: nav visibility, real pagination, sort (uncommitted)
+- Per your feedback on the first UI pass: nav bar now hidden entirely until login (you chose the strictest of 3 options — zero header anywhere while anonymous, including catalog/detail browsing); added real pagination to `/catalog` (was silently capped at 24 products with no way to see more); added a working sort dropdown and real per-category counts in the filter sidebar.
+- Re-verified live via Playwright against the rebuilt stack; full test suite + `ruff` still passing.
+- Details/decisions: `docs/BUILD_PLAN.md`, same Interim section's "Follow-up UI polish" subsection.
+
+### 2026-08-05 — Docker Compose hardening + hot reload (uncommitted)
+- You asked for local hot reload (previously every code change needed a full `make up-build` rebuild — code wasn't bind-mounted, no `--reload`), and for the Compose setup to be cleaner/production-ready.
+- Added `docker-compose.override.yml` (bind-mounts `app/`+`scripts/`, adds `--reload`) — auto-merged by Compose whenever `docker-compose.yml` is, so `make up`/`make up-build` get hot reload for free with no Makefile changes; committed as shared dev tooling, not gitignored as a personal file.
+- Hardened `docker-compose.yml` itself: healthchecks on both services (confirmed Qdrant's `/readyz` live before wiring it in), `depends_on: condition: service_healthy` (previously only waited for container *start*, not readiness), `restart: unless-stopped`, explicit image tag. `Dockerfile` now runs as a non-root user and has its own `HEALTHCHECK`.
+- Added `make prod-build`/`prod-up`/`prod-down` (`-f docker-compose.yml` only, explicitly excluding the dev override) as the path a real deploy/CI would use.
+- Answered two direct questions from you: no "official Docker skill" exists for this project (Library Skills only covers FastAPI/SQLModel, both tiangolo packages — Docker doesn't publish one that way) — applied standard Compose conventions by hand instead. And: the `DATABASE_URL`/`QDRANT_URL` overrides in `docker-compose.yml`'s `environment:` block are intentional, not redundant with `.env` — `.env` covers host-run `uv` commands, Compose's override covers the in-network reality (`localhost` means something different inside the app container than on the host) — now documented in both places so it doesn't look like an oversight again.
+- Verified live: rebuilt, confirmed both services report healthy, confirmed hot reload actually reflects a template edit without a rebuild, confirmed `make prod-up` runs the same image with no bind mounts/no reload.
+
+### 2026-08-05 — Activity log gap acknowledged
+- This file hadn't been updated since it was created, despite the standing instruction to keep it current — the SQLModel re-analysis, the full Stitch UI rollout, the nav/pagination follow-up, and the Docker hardening above all happened without an entry until now. Caught up in this session; going forward, updating this file is part of finishing each piece of work, not a separate step to remember later.

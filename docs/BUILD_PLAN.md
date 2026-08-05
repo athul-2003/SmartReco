@@ -136,6 +136,33 @@ Before starting Phase 3, per user request: adopted a real design system (`docs/D
 
 **Definition of done:** `uv run ruff check` and `uv run pytest` pass (full suite); manual walkthrough — logged-out `/` → register → lands on `/catalog` (cover art renders, no Skill Level filter, AI box shows placeholder copy) → product detail (Related Courses shows) → `/recommendations` (empty state, links back to catalog) → admin `/admin/products` (styled table, cover thumbnails) → create/edit/delete still dual-writes correctly.
 
+**Follow-up UI polish (same interim), per user feedback on the first pass:**
+- **Nav bar hidden entirely until login.** `base.html`'s `<nav>` is now wrapped in `{% if user %}` — anonymous visitors (home, login, register, and anonymous catalog/detail browsing) see zero header chrome, matching the Stitch mockup's login screen exactly. Chosen deliberately over two more conservative options (keep a slim brand+login bar everywhere, or only drop nav on the 3 auth pages) — the tradeoff: anonymous catalog/detail pages now have no persistent way back to `/` or `/login` beyond in-page links, which is an accepted, explicit choice, not an oversight.
+- **Real pagination** added to `/catalog` (`page` query param, `PAGE_SIZE=24`, truncated page-number list e.g. `1 … 4 5 6 … 63` via `_page_numbers()` in `catalog.py`) — the first pass only ever showed the first 24 products with no way to see the rest.
+- **Working sort** (`sort` query param: recommended/newest/price ascending/price descending) and **category counts** in the filter sidebar (`select(Product.category, func.count(Product.id)).group_by(...)`), both real queries, not decorative.
+- Added a decorative hero circle to the Catalog page and a hover-lift transition on product cards for closer visual parity with the Stitch reference.
+
+---
+
+## Interim — Docker Compose Hardening & Hot Reload (before Phase 3)
+
+Before starting Phase 3, per user request: set up hot reload for local dev (code changes were requiring a full `make up-build` rebuild every time — `docker-compose.yml` only bind-mounted `./data`, not the app code, and the Dockerfile's `CMD` had no `--reload`), and made the Compose setup itself more clearly production-ready.
+
+**Tasks**
+- [x] `Dockerfile` — added a non-root `appuser` (created, `chown -R` on `/app`, `USER appuser` before `CMD`) and a `HEALTHCHECK` using Python's stdlib `urllib` (no curl/wget needed in the slim image)
+- [x] `docker-compose.yml` — added `restart: unless-stopped`, healthchecks on both services (`app` via the same urllib probe; `qdrant` via its own `/readyz` endpoint, probed with bash's `/dev/tcp` since the official image ships no curl/wget — confirmed available: `bash`/`sh` present, verified live), `depends_on: qdrant: condition: service_healthy` (previously just waited for the container to *start*, not actually be ready), explicit `build.dockerfile`, and an `image:` tag for registry pushes
+- [x] `docker-compose.override.yml` (new) — bind-mounts `./app` and `./scripts` and overrides `app`'s command to add `--reload`. Compose auto-merges this file whenever `docker-compose.yml` is loaded (no `-f` flag needed), so `make up`/`make up-build` get hot reload for free; committed to the repo (shared dev tooling, not a personal override)
+- [x] `Makefile` — added `prod-build`/`prod-up`/`prod-down`, each passing `-f docker-compose.yml` explicitly to exclude the dev override (no bind mounts, no `--reload`) — this is the path a real deploy or CI/CD pipeline would use
+- [x] `.env.example` — clarified that `DATABASE_URL`/`QDRANT_URL` are host-oriented defaults only (for anything run with bare `uv run` outside Docker); Compose always overrides both to their in-network values regardless of what `.env` says, since "localhost" inside the app container is the container itself, not the Qdrant container or the bind-mounted data directory
+- [x] README's Getting Started section documents the hot-reload dev flow and the `prod-*` targets
+
+**Decisions:**
+- **`.env`'s `DATABASE_URL`/`QDRANT_URL` overrides in `docker-compose.yml` are intentional, not redundant.** They exist because `.env` has to serve two different contexts (host-run `uv` commands vs. the Docker Compose network) that can't share the same values — `localhost` means something different in each. This isn't something to "clean up" by deleting; it's the standard fix for that mismatch. Documented in both `.env.example` and `docker-compose.yml` itself so it doesn't look like an oversight again.
+- **No official Docker Compose skill was available to use for this** — this project's Library Skills mechanism (`AGENTS.md`) only covers FastAPI and SQLModel (both tiangolo packages); Docker isn't a Python package and doesn't publish one through that channel. Applied standard, well-established Compose conventions by hand instead (base + auto-merged `override.yml` for dev, healthchecks, non-root user).
+- **`docker-compose.override.yml` is committed**, not gitignored — it's meant as the team's shared default dev experience (auto-applied for everyone via `make up`), not an individual's personal-preference file, which is the other common convention for that filename.
+
+**Definition of done:** `make up-build` rebuilds and starts the stack with hot reload; editing a router/template/CSS file under `app/` on the host is reflected immediately with no rebuild; `docker compose ps` shows both services healthy; `make prod-build`/`make prod-up` (explicit `-f docker-compose.yml`) start the exact same image with no bind mounts and no `--reload`, confirming the base file alone is deploy-ready.
+
 ---
 
 ## Phase 3 — Behavioral Tracking
