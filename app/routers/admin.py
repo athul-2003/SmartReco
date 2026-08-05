@@ -8,9 +8,11 @@ from app.models.product import Product
 from app.models.user import User
 from app.services import catalog
 from app.services.auth import require_admin
+from app.services.ui import category_cover
 
 router = APIRouter(prefix="/admin/products")
 templates = Jinja2Templates(directory="app/templates")
+templates.env.filters["cover"] = category_cover
 
 
 @router.get("", response_class=HTMLResponse)

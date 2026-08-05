@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}My Recommendations — SmartReco{% endblock %}
+{% block content %}
+<div class="empty-state">
+  <div class="empty-state-icon">✨</div>
+  <h1>Your journey starts here.</h1>
+  <p>We don't have enough data to personalize your recommendations just yet. Browse a bit and we'll get to know you, tailoring the experience to your unique learning path.</p>
+  <a href="/catalog" class="btn btn-primary">Browse Course Catalog &rarr;</a>
+
+  {% if categories %}
+  <div class="starting-points">
+    <span class="label">Popular starting points</span>
+    {% for c in categories %}
+    <a href="/catalog?category={{ c }}">{{ c }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

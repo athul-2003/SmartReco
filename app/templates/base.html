@@ -4,27 +4,34 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}SmartReco{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
-  <nav>
-    <a href="/" class="brand">SmartReco</a>
+  {% if user %}
+  <nav class="site-nav">
+    <a href="/" class="brand">
+      <span class="brand-mark">S</span>
+      SmartReco
+    </a>
     <div class="nav-links">
       <a href="/catalog">Catalog</a>
-      {% if user %}
-        <span class="nav-user">{{ user.email }}{% if user.role.value == "admin" %} · admin{% endif %}</span>
-        {% if user.role.value == "admin" %}<a href="/admin">Admin</a>{% endif %}
-        <form action="/logout" method="post" class="inline-form">
-          <button type="submit">Logout</button>
-        </form>
-      {% else %}
-        <a href="/login">Login</a>
-        <a href="/register">Register</a>
-      {% endif %}
+      <a href="/recommendations">My Recommendations</a>
+      {% if user.role.value == "admin" %}<a href="/admin">Admin</a>{% endif %}
+      <span class="nav-user">{{ user.email }}</span>
+      <form action="/logout" method="post" class="inline-form">
+        <button type="submit">Logout</button>
+      </form>
     </div>
   </nav>
+  {% endif %}
   <main>
     {% block content %}{% endblock %}
   </main>
+  <footer class="footer">
+    &copy; 2026 SmartReco. Built for the SmartReco Build Challenge.
+  </footer>
 </body>
 </html>

@@ -6,7 +6,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import get_settings
 from app.db import init_db
-from app.routers import admin, auth, catalog, pages
+from app.routers import admin, auth, catalog, pages, recommendations
 
 settings = get_settings()
 
@@ -25,3 +25,4 @@ app.include_router(pages.router)
 app.include_router(auth.router)
 app.include_router(catalog.router)
 app.include_router(admin.router)
+app.include_router(recommendations.router)

@@ -112,6 +112,32 @@ Before starting Phase 3, per user request: reworked the Makefile's command names
 
 ---
 
+## Interim — Design System & UI Pass (before Phase 3)
+
+Before starting Phase 3, per user request: adopted a real design system (`docs/DESIGN.md`, generated via Stitch) and applied it to every template built in Phases 1–2, which had been bare unstyled HTML. This is a visual/UI-layer pass only — no Phase 3/4 business logic was added.
+
+**Tasks**
+- [x] `app/static/css/style.css` rewritten as CSS custom properties sourced from `docs/DESIGN.md`'s color/typography/spacing/radius/elevation tokens, plus a derived dark-mode palette (DESIGN.md only ships one palette; the dark variant reuses its `inverse-*`/`*-fixed-dim` tones)
+- [x] Geist + Inter fonts loaded via Google Fonts in `base.html`
+- [x] `app/services/ui.py::category_cover` — deterministic tonal cover + monogram for product cards, since the seeded dataset has no images (no schema/seed-script change; see Decision below)
+- [x] Restyled: `base.html` (nav), `login.html`, `register.html`, `home.html`, `catalog/browse.html`, `catalog/detail.html`, `admin.html`, `admin/products_list.html`, `admin/product_form.html`
+- [x] `catalog.py`'s `detail()` route gained a small `related` query (up to 3 other products in the same category) to power the "Related Courses" section
+- [x] `app/routers/recommendations.py` (new) + `templates/recommendations/empty.html` — `GET /recommendations`, login-gated, always renders the cold-start empty state (true for every user until Phase 4's `Recommendation` model/agent exist); registered in `main.py`
+- [x] Post-login/register redirect changed from `/` to `/catalog`; `/` now redirects authenticated visitors to `/catalog` and serves the marketing page only to anonymous ones
+- [x] `tests/test_ui.py`, `tests/test_recommendations.py` added; `tests/test_auth.py` updated for the new redirect target and admin-page copy
+
+**Decisions:**
+- **Post-login lands on the Catalog, not Recommendations.** Recommendations can't exist without behavioral data (FR-4.1), so a brand-new user has nothing to show there; browsing the catalog is what generates the events the whole pipeline depends on. "My Recommendations" is a persistent nav tab, not the landing page.
+- **No product images — generated tonal covers instead.** Sourcing real images (stock-photo API, Mesh image generation) would add an external dependency/cost never asked for in the SRS. `category_cover()` is pure, deterministic, and needs zero new infrastructure.
+- **`/recommendations` added now, scoped to the empty state only.** Flagged explicitly rather than silently skipping ahead: the route/nav link exist today, but only ever render the cold-start state — no fake data, no agent dependency. Phase 4 extends this same router file with the real populated view.
+- **Skill Level filter dropped** — not part of the SRS's `products` schema (FR-2.2); adding it would be an unflagged scope addition.
+- **AI Suggestion sidebar box kept as a static placeholder** (generic copy, not real AI output) rather than removed — visually reserves its spot for Phase 4 without pretending to be functional.
+- **Match-percentage badges (e.g. "98% Match") deferred to Phase 4, not added now** — but noted as *not* fabricated data: Qdrant already returns a real similarity score per retrieved point, so this can be a genuine number once retrieval exists.
+
+**Definition of done:** `uv run ruff check` and `uv run pytest` pass (full suite); manual walkthrough — logged-out `/` → register → lands on `/catalog` (cover art renders, no Skill Level filter, AI box shows placeholder copy) → product detail (Related Courses shows) → `/recommendations` (empty state, links back to catalog) → admin `/admin/products` (styled table, cover thumbnails) → create/edit/delete still dual-writes correctly.
+
+---
+
 ## Phase 3 — Behavioral Tracking
 
 **Goal:** Non-blocking frontend tracker + efficient backend ingestion. No AI yet — just clean data collection.

@@ -1,28 +1,115 @@
 {% extends "base.html" %}
 {% block title %}Catalog — SmartReco{% endblock %}
 {% block content %}
-<h1>Course Catalog</h1>
+<div class="hero hero-with-art">
+  <div>
+    <h1>Explore Learning</h1>
+    <p>Discover courses across the catalog. Browse a bit — the more you look at, the better your recommendations get.</p>
+  </div>
+  <div class="hero-art" aria-hidden="true">
+    <span>&#9788;</span>
+  </div>
+</div>
+
 <form action="/catalog" method="get" class="search-form">
-  <input type="text" name="q" placeholder="Search courses..." value="{{ q }}">
-  <select name="category">
+  <label for="catalog-search" class="visually-hidden">Search courses</label>
+  <input id="catalog-search" type="text" name="q" placeholder="Search courses..." value="{{ q }}">
+  <label for="catalog-category" class="visually-hidden">Category</label>
+  <select id="catalog-category" name="category" onchange="this.form.submit()">
     <option value="">All categories</option>
-    {% for c in categories %}
+    {% for c, count in categories %}
     <option value="{{ c }}" {% if c == selected_category %}selected{% endif %}>{{ c }}</option>
     {% endfor %}
   </select>
-  <button type="submit">Search</button>
+  <button type="submit" class="btn btn-primary">Search</button>
 </form>
 
-{% if products %}
-<div class="product-grid">
-  {% for product in products %}
-  <a href="/catalog/{{ product.id }}" class="product-card">
-    <h3>{{ product.title }}</h3>
-    <div class="product-meta">{{ product.category }} · {{ "Free" if product.price == 0 else "₹%.2f"|format(product.price) }}</div>
-  </a>
-  {% endfor %}
+<div class="catalog-layout">
+  <aside class="filters">
+    <div class="filters-card">
+      <h3>Categories</h3>
+      <ul>
+        <li>
+          <a href="/catalog{% if q %}?q={{ q }}{% endif %}" class="{{ 'active' if not selected_category }}">
+            <span>All Courses</span><span>{{ total_count if not selected_category and not q else '' }}</span>
+          </a>
+        </li>
+        {% for c, count in categories %}
+        <li>
+          <a href="/catalog?category={{ c }}{% if q %}&q={{ q }}{% endif %}" class="{{ 'active' if c == selected_category }}">
+            <span>{{ c }}</span><span>{{ count }}</span>
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    <div class="ai-suggestion">
+      <span class="chip">AI Suggestion</span>
+      <p>Once you've browsed a few courses, we'll surface a tailored suggestion here based on your activity.</p>
+      <a href="/recommendations">My Recommendations &rarr;</a>
+    </div>
+  </aside>
+
+  <div class="catalog-results">
+    <div class="results-bar">
+      <p class="results-count">
+        {% if total_count %}
+        Showing {{ (page - 1) * page_size + 1 }}&ndash;{{ [(page * page_size), total_count]|min }} of {{ total_count }} course{{ "s" if total_count != 1 else "" }}
+        {% else %}
+        Showing 0 courses
+        {% endif %}
+      </p>
+      <form action="/catalog" method="get" class="sort-form">
+        <input type="hidden" name="q" value="{{ q }}">
+        <input type="hidden" name="category" value="{{ selected_category }}">
+        <label for="catalog-sort" class="visually-hidden">Sort by</label>
+        <select id="catalog-sort" name="sort" onchange="this.form.submit()">
+          <option value="recommended" {% if sort == "recommended" %}selected{% endif %}>Recommended</option>
+          <option value="newest" {% if sort == "newest" %}selected{% endif %}>Newest</option>
+          <option value="price_asc" {% if sort == "price_asc" %}selected{% endif %}>Price: Low to High</option>
+          <option value="price_desc" {% if sort == "price_desc" %}selected{% endif %}>Price: High to Low</option>
+        </select>
+      </form>
+    </div>
+
+    {% if products %}
+    <div class="product-grid">
+      {% for product in products %}
+      {% set cover = product.category|cover %}
+      <a href="/catalog/{{ product.id }}" class="product-card">
+        <div class="product-cover {{ cover.tone_class }}">{{ cover.letter }}</div>
+        <div class="product-card-body">
+          <span class="chip">{{ product.category }}</span>
+          <h3>{{ product.title }}</h3>
+          <p class="product-description">{{ product.description }}</p>
+          <div class="product-meta">
+            <span>{{ "Free" if product.price == 0 else "₹%.2f"|format(product.price) }}</span>
+            <span>&rarr;</span>
+          </div>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+
+    {% if total_pages > 1 %}
+    <nav class="pagination" aria-label="Catalog pages">
+      {% set qs = "&q=" + q if q else "" %}
+      {% set cs = "&category=" + selected_category if selected_category else "" %}
+      {% set ss = "&sort=" + sort if sort != "recommended" else "" %}
+      <a href="/catalog?page={{ page - 1 }}{{ qs }}{{ cs }}{{ ss }}" class="page-link {{ 'disabled' if page <= 1 }}" aria-disabled="{{ 'true' if page <= 1 else 'false' }}">&larr;</a>
+      {% for p in page_numbers %}
+      {% if p is none %}
+      <span class="page-ellipsis">&hellip;</span>
+      {% else %}
+      <a href="/catalog?page={{ p }}{{ qs }}{{ cs }}{{ ss }}" class="page-link {{ 'active' if p == page }}">{{ p }}</a>
+      {% endif %}
+      {% endfor %}
+      <a href="/catalog?page={{ page + 1 }}{{ qs }}{{ cs }}{{ ss }}" class="page-link {{ 'disabled' if page >= total_pages }}" aria-disabled="{{ 'true' if page >= total_pages else 'false' }}">&rarr;</a>
+    </nav>
+    {% endif %}
+    {% else %}
+    <p>No courses match your search.</p>
+    {% endif %}
+  </div>
 </div>
-{% else %}
-<p>No courses match your search.</p>
-{% endif %}
 {% endblock %}
