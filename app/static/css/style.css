@@ -892,3 +892,27 @@ textarea {
   border-radius: var(--radius-lg);
   padding: var(--space-md);
 }
+
+.recommendation-meta {
+  color: var(--on-surface-variant);
+  font-size: 0.85rem;
+}
+
+.narrative-card {
+  background: var(--secondary-container);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+.narrative-card .chip {
+  background: var(--surface-container-lowest);
+  color: var(--secondary);
+  margin-bottom: var(--space-sm);
+}
+
+.narrative-card p {
+  color: var(--on-secondary-container);
+  font-size: 1.05rem;
+  line-height: 1.6;
+}

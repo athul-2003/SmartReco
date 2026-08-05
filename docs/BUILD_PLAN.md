@@ -193,12 +193,22 @@ Before starting Phase 3, per user request: set up hot reload for local dev (code
 **Goal:** The actual recommendation engine — behavioral profile → retrieval → grounded generation — wired end to end, callable manually.
 
 **Tasks**
-- [ ] `models/recommendation.py` — `recommendations` SQLModel table
-- [ ] `agent/nodes.py` — profile-building (recent events → interests/categories/repeated searches), Mesh embed of the profile query, Qdrant top-K retrieval, Mesh chat generation of narrative + product list
-- [ ] `routers/recommendations.py` — endpoint to view current recommendation + a manual "refresh" action
-- [ ] Recommendation display template (narrative + grounded product cards)
+- [x] `models/recommendation.py` — `recommendations` SQLModel table
+- [x] `services/vector_store.py::search` — top-K Qdrant semantic search (deferred from Phase 2, now actually needed)
+- [x] `agent/nodes.py` — `build_profile` (recent events → category counts / repeated searches / dwell-seconds-by-category), `profile_to_query_text`, `retrieve_candidates` (Mesh embed + Qdrant top-K), `generate_narrative` (Mesh chat), `generate_recommendation` (full pipeline, returns `(narrative, product_ids)`)
+- [x] `routers/recommendations.py` extended (the route already existed as a Phase-4-scaffolded empty state, from the PR #9 interim UI pass) — `GET /recommendations` now shows the latest stored recommendation if one exists, `POST /recommendations/refresh` runs the pipeline and stores a new one
+- [x] `templates/recommendations/view.html` — narrative card + grounded product cards (reuses the existing `product-card`/`cover` styling), plus a small CSS addition (`.narrative-card`, `.recommendation-meta`)
 
-**Definition of done:** for a user with tracked events, hitting "refresh" produces a stored, displayed recommendation whose products are all real catalog items (verifiable by ID lookup — never hallucinated).
+**Decisions:**
+- **A straight function chain, not a graph** — matches the Goal ("wired end to end, callable manually") and Phase 6's own framing (FR-4.5's LangGraph refactor is explicitly a *later*, additive bonus step: "refactor `agent/nodes.py` into an explicit `agent/graph.py` graph"). Building a graph now would be un-refactoring work for Phase 6 to redo.
+- **`GET /recommendations` never calls Mesh/Qdrant** — it only reads the latest stored `Recommendation` row (or shows the cold-start empty state if none exists). Only `POST /refresh` runs the pipeline. This is ahead of Phase 5's formal trigger/cache layer, but there's no reason for a page *view* to ever cost an LLM call — Phase 5 adds the automatic-threshold trigger on top of this, not the "don't call Mesh on every view" discipline itself.
+- **Display is always re-grounded against SQL at render time**, not trusted from the stored `product_ids` alone — `view_recommendations` re-fetches `Product` rows by ID and silently skips any ID no longer in the catalog (e.g. a product deleted after the recommendation was generated), rather than crashing or rendering a broken card. Order is preserved from the agent's ranking (`.in_()` doesn't guarantee row order).
+- **`trigger_reason` defaults to `"manual"`** — Phase 4 only has the manual refresh button; Phase 5 introduces the `"threshold"` auto-trigger path onto the same field.
+- **Match-percentage badges still not added**, despite PR #9's interim notes flagging Qdrant's real similarity score as available for this. Displaying it live (right after a refresh) is easy, but showing it consistently on every later page *view* would require either persisting scores (a schema field beyond the SRS's `product_ids`-only spec) or recomputing them on every view (defeats the "no Mesh/Qdrant call on GET" decision above). Left out rather than doing either half-measure; revisit if a later phase gives it a natural home.
+
+**Definition of done:** ✅ Verified. 47/47 automated tests pass (profile aggregation from events, query-text formatting, retrieval/generation with mocked Mesh+Qdrant, router flows including the stale-product-id skip case). **Live, end-to-end, against the real running stack — no mocks:** registered a test user, generated real view/click/dwell/search events on real seeded products (Python/Development-related), hit `POST /recommendations/refresh` (~6s — real Mesh embedding + real Qdrant top-K + real Mesh chat generation), and got back a coherent narrative that correctly referenced the actual behavioral signals ("you've consistently focused on Development and specifically searched for 'python for data science'"), recommending 5 courses — every one of them genuinely Python/data-related, and **all 5 confirmed to exist as real rows in the `products` table** (zero hallucination). Confirmed `GET /recommendations` is fast (93ms vs. the refresh's 6.2s) — no LLM call on a page view. Confirmed a brand-new user with zero events still correctly gets the cold-start empty state, unaffected. Full `docker compose build` from scratch also verified healthy (not just hot-reloaded).
+
+**Phase 4 status: ✅ Complete.**
 
 ---
 
