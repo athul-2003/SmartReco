@@ -1,4 +1,4 @@
-.PHONY: help install build up up-build down logs ps seed test lint fmt clean
+.PHONY: help install build up up-build down logs ps seed create-admin test lint fmt clean
 
 help:
 	@echo "SmartReco - available commands:"
@@ -11,6 +11,7 @@ help:
 	@echo "  make logs          Tail logs from the running stack"
 	@echo "  make ps            Show status of the running stack"
 	@echo "  make seed          Seed the catalog (DB + Qdrant) - run after 'make up'/'make up-build'"
+	@echo "  make create-admin  Interactively create (or promote) an admin user - the only way to get one"
 	@echo ""
 	@echo "  Dev tooling (local, via uv):"
 	@echo "  make install       Install dependencies (uv sync)"
@@ -46,6 +47,9 @@ ps:
 
 seed:
 	docker compose exec app uv run --no-sync python scripts/seed_catalog.py
+
+create-admin:
+	docker compose exec app uv run --no-sync python scripts/create_admin.py
 
 test:
 	uv run pytest -v
