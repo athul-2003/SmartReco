@@ -2,7 +2,7 @@
 
 **A Behavioral AI Recommendation Agent** — built for the *SmartReco Build Challenge 2026*, powered by **Mesh API**.
 
-> **Status:** 🚧 In development — Phase 1 (Foundation) complete: auth, roles, and a running app. Catalog, tracking, and the recommendation agent land in later phases per the [Build Plan](#build-plan).
+> **Status:** 🚧 In development — Phases 1–2 complete: auth, roles, and a seeded, browsable catalog with admin CRUD dual-written to SQL + Qdrant. Behavioral tracking and the recommendation agent land in later phases per the [Build Plan](#build-plan).
 
 ---
 
@@ -143,11 +143,13 @@ All Mesh calls are wrapped in a single internal `LLMClient` — agent logic neve
 
 ## Dataset & Catalog Scope
 
-The catalog is seeded from a **public online-courses dataset** (reference: a Kaggle Coursera/Udacity/Simplilearn/FutureLearn compilation, ~10k rows, with the ~3.7k Udemy-courses dataset as a fallback), trimmed to a **working set of 1,000–2,000 products**, controlled by a `CATALOG_LIMIT` config flag.
+The catalog is seeded from a **public, CC0-1.0 (public domain) Udemy course dataset**, committed to the repo at [`scripts/data/courses.csv`](scripts/data/courses.csv). It's a combination of 5 companion datasets published by Kaggle user `jilkothari` — [Finance & Accounting](https://www.kaggle.com/datasets/jilkothari/finance-accounting-courses-udemy-13k-course), [Business](https://www.kaggle.com/datasets/jilkothari/business-courses-udemy-10k-courses), [IT & Software](https://www.kaggle.com/datasets/jilkothari/it-software-courses-udemy-22k-courses), [Development](https://www.kaggle.com/datasets/jilkothari/udemy-courses-development), and [Lifestyle](https://www.kaggle.com/datasets/jilkothari/lifestyle-courses-udemy-39k-course) — sampled 1,000 rows/category, deduplicated by title, and interleaved round-robin across categories (5,000 rows total). This replaces the SRS's originally-named sources: both were checked via the Kaggle API and came back with an unconfirmed/unspecified license, unsuitable for a public repo — this CC0-1.0 family is cleanly licensed *and* gives better category diversity (5 real categories) for demonstrating behavioral clustering.
 
-This trim is a deliberate design choice, not a limitation: it's plenty for rich semantic retrieval and realistic behavioral clustering, keeps clone-and-run fast for reviewers, and keeps one-time Mesh embedding cost/rate-limit exposure small. Scaling to the full dataset for a live deployment requires no architectural change — only lifting the limit.
+The committed 5,000-row file is deliberately larger than the working set: `CATALOG_LIMIT` (default **1,500**, per the SRS's 1,000–2,000 working-set range) takes a prefix of it at seed time. Because the file is category-interleaved, any prefix length stays balanced across categories — lifting the limit later needs no code or data change.
 
-Seeding (`scripts/seed_catalog.py`) batches embeddings (~100 inputs per Mesh call), is resumable/idempotent (skips products already in Qdrant), and uses light retry/backoff on rate limits.
+The source data has no `description` field (title, price, rating, review/subscriber counts only) — `seed_catalog.py` synthesizes a short description from those real fields rather than embedding a bare title. See `docs/BUILD_PLAN.md` Phase 2 for the full provenance and licensing trail.
+
+Seeding (`scripts/seed_catalog.py`) batches embeddings (~100 inputs per Mesh call — 1,500 products seeds in 15 Mesh calls), is resumable/idempotent (skips titles already in the database), and uses light retry/backoff on rate limits.
 
 ## Planned Project Structure
 
@@ -195,19 +197,23 @@ smartreco/
 uv sync                    # or: make install
 cp .env.example .env       # then fill in MESH_API_KEY
 
+docker compose up -d qdrant             # Qdrant only, for local (non-Docker) app runs
+uv run python scripts/seed_catalog.py   # or: make seed - seeds ~1,500 products into SQLite + Qdrant
+
 uv run uvicorn app.main:app --reload   # or: make run
 ```
 
-App runs at http://localhost:8000 — register an account, log in, log out. Auth and role-gated routes (`/admin`) are live as of Phase 1; the catalog, tracking, and recommendations land in later phases.
+App runs at http://localhost:8000 — register an account, browse/search the catalog at `/catalog`, and (as an admin) manage products at `/admin/products`. Behavioral tracking and recommendations land in later phases.
 
 **Option B — fully containerized (`docker compose`):**
 
 ```bash
 cp .env.example .env       # then fill in MESH_API_KEY
 make docker-up             # or: docker compose up -d
+uv run python scripts/seed_catalog.py   # seeds against the containerized Qdrant (QDRANT_URL in .env points at localhost:6333, exposed by the container)
 ```
 
-This starts both the app (http://localhost:8000) and Qdrant (http://localhost:6333/dashboard) — Qdrant isn't used by the app until Phase 2, but is included now so the whole stack comes up with one command. `make docker-down` to stop.
+This starts both the app (http://localhost:8000) and Qdrant (http://localhost:6333/dashboard) as one stack. `make docker-down` to stop.
 
 **Running tests / lint:**
 

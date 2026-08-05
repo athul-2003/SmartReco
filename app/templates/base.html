@@ -10,6 +10,7 @@
   <nav>
     <a href="/" class="brand">SmartReco</a>
     <div class="nav-links">
+      <a href="/catalog">Catalog</a>
       {% if user %}
         <span class="nav-user">{{ user.email }}{% if user.role.value == "admin" %} · admin{% endif %}</span>
         {% if user.role.value == "admin" %}<a href="/admin">Admin</a>{% endif %}

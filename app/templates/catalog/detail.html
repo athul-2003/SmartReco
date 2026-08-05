@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}{{ product.title }} — SmartReco{% endblock %}
+{% block content %}
+<p><a href="/catalog">&larr; Back to catalog</a></p>
+<h1>{{ product.title }}</h1>
+<p class="product-meta">{{ product.category }} · {{ "Free" if product.price == 0 else "₹%.2f"|format(product.price) }}</p>
+<p>{{ product.description }}</p>
+{% endblock %}

@@ -16,7 +16,9 @@ services:
       - qdrant
 
   qdrant:
-    image: qdrant/qdrant:latest
+    # Pinned (not :latest) for reproducibility, and to stay compatible with
+    # the qdrant-client version pinned in pyproject.toml.
+    image: qdrant/qdrant:v1.14.1
     ports:
       - "6333:6333"
     volumes:

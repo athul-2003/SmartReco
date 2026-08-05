@@ -64,23 +64,31 @@ Where the SRS left a decision open, it's resolved below (marked **Decision**) so
 **Goal:** Admin can manage products; every write lands in SQL *and* Qdrant, atomically. The catalog is seeded.
 
 **Tasks**
-- [ ] `models/product.py` — `products` SQLModel table
-- [ ] `services/embeddings.py` — Mesh embeddings helper (batched)
-- [ ] `services/vector_store.py` — Qdrant client, collection setup, upsert/delete by `product.id`
-- [ ] `services/llm_client.py` — the single `LLMClient` wrapper (promoted from the Phase 0 spike)
-- [ ] Admin CRUD routes/templates (create/edit/delete products) — dual-write wrapped so a Mesh/Qdrant failure rolls back the SQL write (FR-2.5)
-- [ ] Public catalog browse/search/detail routes (FR-2.1)
-- [ ] `scripts/seed_catalog.py` — loads dataset, batches embeddings (~100/call), resumable (skip existing Qdrant points), light retry/backoff on rate limits
-- [ ] Local Qdrant via `docker run -p 6333:6333 qdrant/qdrant`
+- [x] `models/product.py` — `products` SQLModel table
+- [x] `services/embeddings.py` — Mesh embeddings helper (batched, retry/backoff)
+- [x] `services/vector_store.py` — Qdrant client, collection setup, upsert/delete by `product.id`, `get_indexed_ids`/`count` for resumability + verification
+- [x] `services/llm_client.py` — the single `LLMClient` wrapper (promoted from the Phase 0 spike)
+- [x] `services/catalog.py` — dual-write orchestration (`create_product`/`update_product`/`delete_product`), rolls back SQL on any Mesh/Qdrant failure (FR-2.5), raises `DualWriteError`
+- [x] Admin CRUD routes/templates (`/admin/products`, create/edit/delete) — wired to `catalog.py`, shows a friendly error on `DualWriteError` instead of a raw 500
+- [x] Public catalog browse/search/detail routes (`/catalog`, `/catalog/{id}`) — search by title/description, filter by category (FR-2.1)
+- [x] `scripts/seed_catalog.py` — loads `scripts/data/courses.csv`, batches embeddings (~100/call), resumable (skips titles already in SQL), retry/backoff via `embeddings.py`
+- [x] Local Qdrant via Docker — already covered by `docker-compose.yml` (Phase 1)
 
 **Decisions:**
-- **Dataset:** Kaggle online-courses compilation (Coursera/Udacity/Simplilearn/FutureLearn, ~10k rows) as primary source; the ~3.7k Udemy-courses dataset as fallback if the primary is unavailable/license-blocked at build time.
-- **`CATALOG_LIMIT` default: 1,500** products — midpoint of the SRS's 1,000–2,000 working-set range, config-flag-driven so it's a one-line change either direction.
+- **Dataset — changed from the SRS's originally-named sources.** Both the ~10k "Coursera/Udacity/Simplilearn/FutureLearn compilation" (primary) and the ~3.7k Udemy-courses set (fallback) were checked via the Kaggle API and came back `"licenses": [{"name": "unknown"}]` and `{"name": "other", ...license not specified at source}` respectively — not safe to redistribute in a public hackathon repo. Searched further (user-approved) and found a **CC0-1.0 (public domain)** family of 5 companion Udemy-category datasets from the same Kaggle uploader (`jilkothari`): IT & Software, Development, Business, Finance & Accounting, Lifestyle. Sampled 1,000 rows/category, deduped by title, interleaved round-robin across categories, and committed the result as `scripts/data/courses.csv` (5,000 rows, ~400KB, CC0-1.0 — freely redistributable, no attribution required). This is a genuine improvement over either originally-named source: cleanly licensed *and* better category diversity (5 real categories vs. the fallback's 4) for demonstrating behavioral clustering.
+- **No `description` field in the source data** (title + price + rating + review/subscriber counts only — confirmed across all 5 category files). Mitigated two ways: Udemy titles are keyword-rich/SEO-optimized and carry more embedding signal than a bare product title would; `seed_catalog.py` also synthesizes a short enriched description from the real metadata fields (category, rating, review count) rather than embedding the title alone. Expected impact: coarse-grained clustering (the SRS's own "keeps landing on agentic-AI content" example) works fine; fine-grained nuance *within* one category is where a true prose description would have helped more.
+- **`CATALOG_LIMIT` default stays 1,500** products, sliced as a prefix of the committed 5,000-row file — the file is deliberately larger than the working set (round-robin interleaved, so any prefix length stays category-balanced) so lifting the limit later needs no code change, matching SRS Sec. 9.1's intent.
+- Prices are as scraped, in **INR** (all 5 source files are India-region Udemy data) — stored as a plain float per the SRS schema, no currency field/conversion invented.
 - `Typer` for the seed script's CLI flags is an optional nicety, not core scope — add it only if plain `argparse`/hardcoded flags start feeling limiting.
+- **Pinned Qdrant versions on both sides.** `qdrant/qdrant:latest` resolved to server 1.14.1, which the initially-installed `qdrant-client` (1.19.0) flagged as version-incompatible (major must match, minor diff ≤1). Rather than chase whatever `:latest` happens to be, pinned the image to `qdrant/qdrant:v1.14.1` (reproducibility - `:latest` silently drifting is its own risk) and `qdrant-client` to `>=1.14,<1.16` (resolved 1.15.1) to match. No more warning.
+- **`seed_catalog.py` needs `sys.path` patched** — running it as `python scripts/seed_catalog.py` (the documented, SRS-matching invocation) only puts `scripts/` on `sys.path`, not the project root, so bare `app.*` imports fail. Fixed with an explicit `sys.path.insert(0, ...)` at the top of the script rather than changing the documented command to module form (`-m scripts.seed_catalog`).
+- **Dockerfile `CMD` changed to `uv run --no-sync ...`** — plain `uv run` re-syncs the environment (including the `dev` dependency group: ruff, pytest) on every container start, adding ~15s and installing tools the running app never needs. Dependencies are already correct from the build-time `uv sync --no-dev` layers; `--no-sync` skips the redundant runtime check entirely.
 
-**You provide:** Docker running locally; the chosen dataset CSV placed where the seed script expects it.
+**You provide:** Docker running locally (already satisfied via `make docker-up`). Dataset sourcing no longer needs anything from you — it's committed to the repo.
 
-**Definition of done:** `uv run python scripts/seed_catalog.py` populates SQLite + Qdrant with ~1,500 products; admin CRUD keeps both stores in sync (verified by editing/deleting a product and checking both stores).
+**Definition of done:** ✅ Verified. `uv run python scripts/seed_catalog.py` run live against real Mesh + local Qdrant: 1,500/1,500 SQL↔Qdrant sync confirmed directly against both stores; re-running immediately confirmed resumability (all 1,500 skipped, "Nothing new to seed"). Admin dual-write verified live (not mocked): created a real product through `/admin/products/new` → Qdrant `points_count` 1500→1501 with a real Mesh embedding; deleted it → back to 1500. All 24 automated tests pass (`pytest`), `ruff check`/`format` clean. Full `docker compose build && up` verified: app + Qdrant both healthy, `/`, `/catalog`, `/catalog?category=...` all respond correctly through the container.
+
+**Phase 2 status: ✅ Complete.**
 
 ---
 

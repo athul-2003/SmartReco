@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit" if mode == "edit" else "New" }} Product — SmartReco Admin{% endblock %}
+{% block content %}
+<h1>{{ "Edit" if mode == "edit" else "New" }} Product</h1>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+<form
+  action="{{ '/admin/products/%d/edit'|format(product.id) if mode == 'edit' else '/admin/products/new' }}"
+  method="post"
+  class="auth-form"
+>
+  <label>Title
+    <input type="text" name="title" required value="{{ product.title if product else '' }}">
+  </label>
+  <label>Description
+    <textarea name="description" rows="4" required>{{ product.description if product else '' }}</textarea>
+  </label>
+  <label>Category
+    <input type="text" name="category" required value="{{ product.category if product else '' }}">
+  </label>
+  <label>Price
+    <input type="number" name="price" step="0.01" min="0" value="{{ product.price if product else 0 }}">
+  </label>
+  <button type="submit">{{ "Save" if mode == "edit" else "Create" }}</button>
+</form>
+<p><a href="/admin/products">Back to products</a></p>
+{% endblock %}
