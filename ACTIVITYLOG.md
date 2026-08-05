@@ -13,9 +13,9 @@ If this file ever conflicts with either of those on *what to build*, they win. T
 ## Current Status
 
 - **Last updated:** 2026-08-05
-- **Where things stand:** Phases 0–2 complete and merged to `main` (7 PRs total, plus uncommitted interim work — see below). SRS re-confirmed SQLModel as the ORM (docs already matched). A full design-system UI pass (Stitch-generated `docs/DESIGN.md`) has been applied across every Phase 1–2 template, plus Docker Compose hardening (healthchecks, non-root user, hot reload for dev, explicit prod path). None of the interim work below is committed yet — still sitting as uncommitted changes on `main`, pending your review/go-ahead to commit.
-- **Next up:** Phase 3 — Behavioral Tracking (per `docs/BUILD_PLAN.md`) — not started yet.
-- **Blocking on you:** the hackathon dashboard entry-submission form still isn't filled in — CI checks run and pass, but per the CI's own error, results aren't recorded until that form is submitted. Not urgent, but needed before final submission. Also: the interim UI/Docker work described below is uncommitted — say the word when you want it committed (and whether as one or several PRs).
+- **Where things stand:** Phases 0–3 complete and merged to `main` (7 PRs), plus the interim UI redesign (Stitch design system) and Docker Compose hardening/hot-reload work (PR #9). Phase 3 (Behavioral Tracking) just landed — event model, tracker.js, ingestion endpoint, wired into the catalog/detail templates.
+- **Next up:** Phase 4 — Agent Core (RAG Pipeline), per `docs/BUILD_PLAN.md`.
+- **Blocking on you:** the hackathon dashboard entry-submission form still isn't filled in — CI checks run and pass, but per the CI's own error, results aren't recorded until that form is submitted. Not urgent, but needed before final submission. Also: Phase 3's client-side JS (`tracker.js`) was carefully code-reviewed and its backend calls verified live, but never executed in an actual browser — worth a quick real-browser spot-check (DevTools Network tab, browse the catalog, confirm a batched POST to `/events`) when you get a chance.
 
 ---
 
@@ -107,3 +107,12 @@ Not phase-specific — still in force, and should keep being followed unless you
 
 ### 2026-08-05 — Activity log gap acknowledged
 - This file hadn't been updated since it was created, despite the standing instruction to keep it current — the SQLModel re-analysis, the full Stitch UI rollout, the nav/pagination follow-up, and the Docker hardening above all happened without an entry until now. Caught up in this session; going forward, updating this file is part of finishing each piece of work, not a separate step to remember later.
+
+### 2026-08-05 — Interim work merged (PR #9), Phase 3 starting
+- A separate chat session picked this repo back up, found the interim UI + Docker work above still uncommitted, and merged it to `main` as PR #9 ("Interim: Stitch design system UI pass + Docker Compose hardening/hot-reload"). `Current Status` above updated to match — this file's own log entries had gone stale relative to git state (said "uncommitted" after it was actually merged), a small illustration of exactly why this file needs to be kept current, not just written once.
+- Starting Phase 3 (Behavioral Tracking) on top of this new baseline.
+
+### 2026-08-05 — Phase 3: Behavioral Tracking
+- `events` table, `POST /events` (Pydantic-validated batch, 1–50 events, plain 401 not a page-redirect since it's a JS-only endpoint), and `static/js/tracker.js` (view/search/click/dwell, batches on 10s/20-events/page-unload, `fetch(keepalive)` with a `sendBeacon` fallback on unload). Wired into the (redesigned, per PR #9) catalog/detail templates via `data-*` attributes.
+- **Found and fixed a real, severe Docker bug from PR #9's non-root-user hardening**, unrelated to tracking but blocking everything: `appuser` couldn't write to the bind-mounted `./data` directory (host-side ownership doesn't match the container user once the bind mount replaces the build-time-`chown`'d path) — broke `make up-build` for anyone. Fixed with the standard root-entrypoint-then-`gosu`-drop-to-appuser pattern (`docker-entrypoint.sh`). Added `.gitattributes` alongside it so the new shell script's LF line endings survive a Windows checkout.
+- 37/37 tests passing. Verified live: a real event batch (matching the tracker's exact shape) correctly landed in `events` with the right user/type/product/metadata; confirmed the script/data-attributes render correctly (present only when logged in). Honest gap: the client-side JS logic itself was code-reviewed, not executed in a real browser — no browser/JS-runtime tool available in this environment to do that directly.
