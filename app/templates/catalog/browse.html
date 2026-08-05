@@ -11,7 +11,7 @@
   </div>
 </div>
 
-<form action="/catalog" method="get" class="search-form">
+<form action="/catalog" method="get" class="search-form" data-track-search>
   <label for="catalog-search" class="visually-hidden">Search courses</label>
   <input id="catalog-search" type="text" name="q" placeholder="Search courses..." value="{{ q }}">
   <label for="catalog-category" class="visually-hidden">Category</label>
@@ -76,7 +76,7 @@
     <div class="product-grid">
       {% for product in products %}
       {% set cover = product.category|cover %}
-      <a href="/catalog/{{ product.id }}" class="product-card">
+      <a href="/catalog/{{ product.id }}" class="product-card" data-product-id="{{ product.id }}">
         <div class="product-cover {{ cover.tone_class }}">{{ cover.letter }}</div>
         <div class="product-card-body">
           <span class="chip">{{ product.category }}</span>

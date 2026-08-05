@@ -1,0 +1,6 @@
+# Shell scripts and Docker files must keep LF line endings - a CRLF shebang
+# line breaks `/bin/sh` inside the Linux container, and Windows' default
+# core.autocrlf=true would otherwise silently convert these on checkout.
+*.sh text eol=lf
+Dockerfile text eol=lf
+docker-compose*.yml text eol=lf
