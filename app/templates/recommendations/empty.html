@@ -3,9 +3,18 @@
 {% block content %}
 <div class="empty-state">
   <div class="empty-state-icon">✨</div>
+  {% if has_activity %}
+  <h1>Ready when you are.</h1>
+  <p>We've picked up on some of your browsing already. Generate your first set of recommendations now, or keep exploring first — either way, the more you browse, the better they get.</p>
+  <form action="/recommendations/refresh" method="post">
+    <button type="submit" class="btn btn-primary">Generate My Recommendations &rarr;</button>
+  </form>
+  <a href="/catalog" class="btn btn-ghost">Keep Browsing</a>
+  {% else %}
   <h1>Your journey starts here.</h1>
   <p>We don't have enough data to personalize your recommendations just yet. Browse a bit and we'll get to know you, tailoring the experience to your unique learning path.</p>
   <a href="/catalog" class="btn btn-primary">Browse Course Catalog &rarr;</a>
+  {% endif %}
 
   {% if categories %}
   <div class="starting-points">
