@@ -11,14 +11,18 @@ Where the SRS left a decision open, it's resolved below (marked **Decision**) so
 **Goal:** Prove Mesh API connectivity before anything else is built on top of it — this is the make-or-break requirement, so it's de-risked first.
 
 **Tasks**
-- [ ] `uv init`, add `openai`, `pydantic-settings`, `python-dotenv` as deps
-- [ ] `.env.example` with `MESH_API_KEY=`
-- [ ] `.gitignore` (must include `.env`, `.venv`, `__pycache__`, `*.db`)
-- [ ] One throwaway script: one `embeddings.create` call + one `chat.completions.create` call through Mesh, printing the results
+- [x] `uv init`, add `openai`, `pydantic-settings`, `python-dotenv` as deps
+- [x] `.env.example` with `MESH_API_KEY=` (done ahead of schedule, alongside `.gitignore`, while enabling CI checks)
+- [x] `.gitignore` (must include `.env`, `.venv`, `__pycache__`, `*.db`) (done ahead of schedule, see above)
+- [x] One throwaway script: one `embeddings.create` call + one `chat.completions.create` call through Mesh, printing the results — `scripts/mesh_spike.py`
 
-**You provide:** a valid Mesh API key (`rsk_...`) in your local `.env`.
+**Decision:** confirmed real Mesh model identifiers empirically (docs list unreliable/possibly stale) — `sentence-transformers/all-minilm-l6-v2` for embeddings (384-dim, verified), `openai/chat-latest` for chat completions. Both live in `scripts/mesh_spike.py`; Phase 2's `LLMClient`/`embeddings.py` should reuse these unless a reason emerges to change them.
 
-**Definition of done:** script runs, both calls succeed, response is printed. Nothing else depends on this script surviving — it's a spike, can be deleted once Phase 1 introduces the real `LLMClient`.
+**You provide:** a valid Mesh API key (`rsk_...`) in your local `.env`. — Done.
+
+**Definition of done:** script runs, both calls succeed, response is printed. ✅ Verified `uv run python scripts/mesh_spike.py` — embedding call returned a 384-dim vector, chat completion returned a coherent response. Nothing else depends on this script surviving — it's a spike, can be deleted once Phase 1 introduces the real `LLMClient`.
+
+**Phase 0 status: ✅ Complete.**
 
 ---
 
