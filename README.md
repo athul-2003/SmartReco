@@ -195,7 +195,10 @@ smartreco/
 cp .env.example .env       # then fill in MESH_API_KEY
 make up-build               # builds the app image, then starts app + Qdrant
 make seed                   # seeds ~1,500 products into SQLite + Qdrant (run once the stack is up)
+make create-admin           # interactively create an admin account (email + password + confirm)
 ```
+
+Anyone can self-register a regular user via `/register` in the UI. There's no admin option there by design — creating an admin only happens via `make create-admin`, so privilege escalation can't happen through the public signup form. The command is idempotent: run it again with an email that's already a regular user and it promotes that account to admin instead of erroring.
 
 - App: http://localhost:8000 — register an account, browse/search the catalog at `/catalog`, and (as an admin) manage products at `/admin/products`.
 - Qdrant dashboard: http://localhost:6333/dashboard
