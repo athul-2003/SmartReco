@@ -7,17 +7,19 @@ Instructions for Claude Code (and any contributor) working in this repository.
 SmartReco is a behavioral AI recommendation platform built for the SmartReco Build Challenge 2026, with every AI call routed through Mesh API. Before doing any work, be familiar with:
 
 - [`README.md`](README.md) — project overview, architecture, tech stack.
-- [`docs/SmartReco_SRS.docx`](docs/SmartReco_SRS.docx) — the source Software Requirements Specification. Requirement IDs (FR-1, FR-2, ...) referenced anywhere in code or commits trace back to this document.
-- [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md) — the phase-by-phase execution plan. **This is the authoritative task list — do not invent scope outside it without flagging the addition to the user first.**
+- [`docs/SmartReco_SRS.docx`](docs/SmartReco_SRS.docx) — the **ultimate source of truth** for requirements. If anything else in the repo (including `BUILD_PLAN.md`) ever conflicts with it, the SRS wins and the conflicting doc gets corrected.
+- [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md) — the **mandatory** phase-by-phase execution path, derived from the SRS. Phases run strictly in the order it defines — do not skip ahead, reorder, or invent scope outside it without flagging the addition to the user first.
+- [`AGENTS.md`](AGENTS.md) — official, version-synced AI coding-agent skills for this project's core libraries (FastAPI, SQLModel), installed via Library Skills. See [AI Agent Skills](#ai-agent-skills) below.
 
 ## How to Execute Phases
 
 1. Work **one phase at a time**, strictly in the order defined in `docs/BUILD_PLAN.md`. Do not start Phase *N+1* until Phase *N* has been merged to `main`.
 2. Before starting a phase, re-read its section in `BUILD_PLAN.md` — tasks, decisions already made, and its Definition of Done.
-3. Check off tasks in `BUILD_PLAN.md` as they're completed within the phase (keep the checklist honest — it's the project's real progress tracker).
-4. If a phase surfaces an ambiguity the SRS doesn't resolve, make the pragmatic call yourself (matching the precedent already set in `BUILD_PLAN.md`'s "Decision" callouts) and record what was decided and why in the PR description — don't block the phase on it unless it's a genuinely consequential, hard-to-reverse choice.
-5. A phase is not "done" until its Definition of Done in `BUILD_PLAN.md` is met, its tests pass (see below), and it's merged to `main` via PR.
-6. Don't bundle multiple phases into one branch/PR. One phase = one branch = one PR (a phase can be split into more than one PR if it's large, but never merge phases together).
+3. **Check off each task in `BUILD_PLAN.md` immediately after completing it** — not batched at the end of the phase. The checklist must always reflect real, current progress.
+4. **If any work happens that wasn't already listed in `BUILD_PLAN.md`** — a new decision, an extra setup step, tooling introduced mid-phase — add it to `BUILD_PLAN.md` as it happens. The plan must stay a complete, accurate record of what the project actually needed done, not just what was anticipated up front.
+5. If a phase surfaces an ambiguity the SRS doesn't resolve, make the pragmatic call yourself (matching the precedent already set in `BUILD_PLAN.md`'s "Decision" callouts) and record what was decided and why in the PR description **and** in `BUILD_PLAN.md` itself — don't block the phase on it unless it's a genuinely consequential, hard-to-reverse choice.
+6. A phase is not "done" until its Definition of Done in `BUILD_PLAN.md` is met, its tests pass (see below), and it's merged to `main` via PR.
+7. Don't bundle multiple phases into one branch/PR. One phase = one branch = one PR (a phase can be split into more than one PR if it's large, but never merge phases together).
 
 ## Testing Requirements
 
@@ -81,6 +83,14 @@ gh pr create --title "..." --body "..."
 - **PR size:** small and focused — one phase (or one sub-task of a large phase) per PR. If a phase's diff is getting large enough to be hard to review, split it.
 - **README/`.env.example` upkeep:** update at the end of every phase if setup steps or required env vars changed — don't let docs drift from what the code actually needs.
 - **Migrations:** once the schema stabilizes past initial dev iteration, introduce Alembic migrations rather than relying on `create_all` — keeps the SQLite → Postgres path (already promised in the SRS) honest.
+
+## AI Agent Skills
+
+FastAPI and SQLModel each publish an official, version-synced AI coding-agent skill via [Library Skills](https://library-skills.io) — see [`AGENTS.md`](AGENTS.md) for full detail.
+
+- **When to install/refresh:** once `fastapi`/`sqlmodel` are real dependencies (Phase 1 onward), and again any time either is upgraded: `uvx library-skills --claude`. This installs into `.claude/skills/` as symlinks, so content always matches the version actually pinned in `uv.lock`.
+- **When to use them:** reach for the installed FastAPI/SQLModel skills (via the `Skill` tool, same as any other Claude Code skill) when writing or reviewing routers, dependencies, request/response models, or SQLModel table/schema classes — anywhere the *how* of idiomatic FastAPI/SQLModel code matters.
+- **What they are not:** a source of scope or requirements. `docs/BUILD_PLAN.md` and `docs/SmartReco_SRS.docx` remain authoritative for *what* to build; these skills only inform *how* to write the FastAPI/SQLModel code correctly.
 
 ## Definition of Done — Every Phase, Before Opening a PR
 

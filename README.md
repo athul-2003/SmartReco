@@ -86,7 +86,7 @@ flowchart TD
 | LLM access | **openai SDK → Mesh API** | Mandatory Mesh routing, behind a swappable wrapper. |
 | Vector DB | **Qdrant** | Strong metadata filtering; local Docker for dev, Cloud free tier for deploy. |
 | Relational DB | **SQLite → Postgres** | Zero-config for dev/demo; Postgres-ready via a single `DATABASE_URL` change. |
-| ORM | **SQLAlchemy** | DB-agnostic models. |
+| ORM | **SQLModel** | SQLAlchemy + Pydantic in one model (FastAPI author); one class is both ORM table and schema; still SQLite → Postgres via `DATABASE_URL`. |
 | Agent (bonus) | **LangGraph** | Explicit reasoning graph: analyze → retrieve → evaluate → refine → generate. |
 | Scheduling (bonus) | **APScheduler** | In-process daily digest job — no extra broker needed for a solo build. |
 | Observability (bonus) | **LangSmith** | End-to-end tracing of the agent workflow. |
@@ -120,7 +120,7 @@ All Mesh calls are wrapped in a single internal `LLMClient` — agent logic neve
 
 ## Data Model
 
-**Relational schema** (SQLAlchemy, SQLite → Postgres):
+**Relational schema** (SQLModel, SQLite → Postgres):
 
 - **users** — `id`, `email` (unique), `password_hash` (bcrypt), `role` (`user`/`admin`), `created_at`
 - **products** — `id` (also the Qdrant point ID), `title`, `description`, `category`, `price`, `created_at`/`updated_at`
@@ -156,9 +156,9 @@ smartreco/
   app/
     main.py                # FastAPI app factory, routers, startup
     config.py               # pydantic-settings; reads .env
-    db.py                    # SQLAlchemy engine/session
-    models/                  # ORM models: user, product, event, recommendation
-    schemas/                 # Pydantic request/response models
+    db.py                    # SQLModel engine/session (SQLAlchemy under the hood)
+    models/                  # SQLModel tables: user, product, event, recommendation
+    schemas/                 # SQLModel/Pydantic request/response models
     routers/                 # auth, catalog, admin, events, recommendations
     services/
       llm_client.py          # thin Mesh wrapper (openai SDK)
@@ -217,7 +217,7 @@ Sequenced to de-risk the make-or-break item (Mesh) first, then the grounded pipe
 | Phase | Deliverable |
 |---|---|
 | 0 — Mesh spike | Minimal script: one embedding + one chat call through Mesh. |
-| 1 — Foundation | FastAPI app (uv), SQLAlchemy models, auth + roles, Jinja2 shell. |
+| 1 — Foundation | FastAPI app (uv), SQLModel models, auth + roles, Jinja2 shell. |
 | 2 — Catalog + dual-write | Admin CRUD; seed script; products dual-written to SQLite + Qdrant. |
 | 3 — Tracking | Vanilla-JS batched/throttled tracker; non-blocking ingestion. |
 | 4 — Agent (core) | Profile → Mesh embed → Qdrant retrieve → Mesh generate → store → display. |
