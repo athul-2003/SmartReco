@@ -21,6 +21,17 @@ venv/
 # uv
 .python-version
 
+# Library Skills - regenerated from installed packages via `uvx library-skills`,
+# see AGENTS.md. Not committed: content is derived/vendored and goes stale the
+# moment fastapi/sqlmodel is upgraded.
+.agents/
+
+# Claude Code local tool state (skills installed above, scheduled-task locks, etc.)
+.claude/
+
+# Docker bind-mounted app data (SQLite file when running via docker-compose)
+data/
+
 # IDE / OS
 .vscode/
 .idea/

@@ -2,7 +2,7 @@
 
 **A Behavioral AI Recommendation Agent** — built for the *SmartReco Build Challenge 2026*, powered by **Mesh API**.
 
-> **Status:** 📋 Planning / pre-implementation. The Software Requirements Specification is finalized ([`docs/SmartReco_SRS.docx`](docs/SmartReco_SRS.docx)); no application code has been written yet. This README documents the intended system and will be updated as each phase in the [Build Plan](#build-plan) lands.
+> **Status:** 🚧 In development — Phase 1 (Foundation) complete: auth, roles, and a running app. Catalog, tracking, and the recommendation agent land in later phases per the [Build Plan](#build-plan).
 
 ---
 
@@ -181,32 +181,43 @@ smartreco/
   README.md
 ```
 
-## Getting Started *(planned — not yet implemented)*
+## Getting Started
 
 **Prerequisites:**
 - Python 3.11+ with [`uv`](https://github.com/astral-sh/uv)
-- Docker (to run Qdrant locally)
+- Docker (for `docker compose`, and/or to run Qdrant locally from Phase 2 onward)
 - A valid Mesh API key (prefixed `rsk_`)
+- `make` (optional — every command below also has a plain `uv`/`docker compose` equivalent)
 
-**Planned setup:**
+**Option A — local (`uv`):**
 
 ```bash
-# 1. Clone and install dependencies
-uv sync
+uv sync                    # or: make install
+cp .env.example .env       # then fill in MESH_API_KEY
 
-# 2. Configure environment
-cp .env.example .env
-# then fill in MESH_API_KEY and any DB/Qdrant overrides
-
-# 3. Start Qdrant locally
-docker run -p 6333:6333 qdrant/qdrant
-
-# 4. Seed the catalog (writes to SQLite + Qdrant)
-uv run python scripts/seed_catalog.py
-
-# 5. Run the app
-uv run uvicorn app.main:app --reload
+uv run uvicorn app.main:app --reload   # or: make run
 ```
+
+App runs at http://localhost:8000 — register an account, log in, log out. Auth and role-gated routes (`/admin`) are live as of Phase 1; the catalog, tracking, and recommendations land in later phases.
+
+**Option B — fully containerized (`docker compose`):**
+
+```bash
+cp .env.example .env       # then fill in MESH_API_KEY
+make docker-up             # or: docker compose up -d
+```
+
+This starts both the app (http://localhost:8000) and Qdrant (http://localhost:6333/dashboard) — Qdrant isn't used by the app until Phase 2, but is included now so the whole stack comes up with one command. `make docker-down` to stop.
+
+**Running tests / lint:**
+
+```bash
+make test    # or: uv run pytest
+make lint    # or: uv run ruff check app scripts tests
+make fmt     # or: uv run ruff format app scripts tests
+```
+
+Run `make help` for the full list of available commands.
 
 Required environment variables include `MESH_API_KEY` (mandatory for every AI call) and `DATABASE_URL` (defaults to a local SQLite file; swap to Postgres for production). Secrets are never committed — `.env` is gitignored.
 
