@@ -29,13 +29,17 @@ Where the SRS left a decision open, it's resolved below (marked **Decision**) so
 **Tasks**
 - [ ] Project structure per README (`app/`, `models/`, `schemas/`, `routers/`, `services/`, `templates/`, `static/`)
 - [ ] `config.py` — pydantic-settings reading `.env` (`MESH_API_KEY`, `DATABASE_URL`, session secret)
-- [ ] `db.py` — SQLAlchemy engine/session, SQLite by default
-- [ ] `models/user.py` — `users` table (FR-1)
+- [ ] `db.py` — SQLModel engine/session (SQLAlchemy under the hood), SQLite by default
+- [ ] `models/user.py` — `users` SQLModel table (FR-1)
 - [ ] Auth: register/login/logout via `passlib[bcrypt]`; session via Starlette `SessionMiddleware` (signed cookie — no separate session table needed for a solo build)
 - [ ] Role enforcement dependency (`user` vs `admin`) for route protection
 - [ ] Minimal Jinja2 base template + nav
+- [ ] Once `fastapi`/`sqlmodel` are added as dependencies, run `uvx library-skills --claude` to install their official AI agent skills into `.claude/skills/` (see [`AGENTS.md`](../AGENTS.md))
 
-**Decision:** sessions are **signed-cookie based** (`SessionMiddleware`), not DB-backed — simplest option that satisfies FR-1.3 without an extra table.
+**Decisions:**
+- Sessions are **signed-cookie based** (`SessionMiddleware`), not DB-backed — simplest option that satisfies FR-1.3 without an extra table.
+- ORM is **SQLModel**, not raw SQLAlchemy — one class serves as both the DB table and the Pydantic schema, still SQLite → Postgres via `DATABASE_URL`. Database access stays **synchronous** (SQLModel supports async, but sync is simpler and adequate at hackathon scale/demo reliability).
+- Adopted **Library Skills** (`AGENTS.md`) for FastAPI/SQLModel — official, version-synced coding-agent guidance bundled directly with those packages; installed into `.claude/skills/` and refreshed on every upgrade.
 
 **Definition of done:** can register, log in, see a role-aware page, log out. `uv run uvicorn app.main:app --reload` serves it end to end.
 
@@ -46,7 +50,7 @@ Where the SRS left a decision open, it's resolved below (marked **Decision**) so
 **Goal:** Admin can manage products; every write lands in SQL *and* Qdrant, atomically. The catalog is seeded.
 
 **Tasks**
-- [ ] `models/product.py` — `products` table
+- [ ] `models/product.py` — `products` SQLModel table
 - [ ] `services/embeddings.py` — Mesh embeddings helper (batched)
 - [ ] `services/vector_store.py` — Qdrant client, collection setup, upsert/delete by `product.id`
 - [ ] `services/llm_client.py` — the single `LLMClient` wrapper (promoted from the Phase 0 spike)
@@ -58,6 +62,7 @@ Where the SRS left a decision open, it's resolved below (marked **Decision**) so
 **Decisions:**
 - **Dataset:** Kaggle online-courses compilation (Coursera/Udacity/Simplilearn/FutureLearn, ~10k rows) as primary source; the ~3.7k Udemy-courses dataset as fallback if the primary is unavailable/license-blocked at build time.
 - **`CATALOG_LIMIT` default: 1,500** products — midpoint of the SRS's 1,000–2,000 working-set range, config-flag-driven so it's a one-line change either direction.
+- `Typer` for the seed script's CLI flags is an optional nicety, not core scope — add it only if plain `argparse`/hardcoded flags start feeling limiting.
 
 **You provide:** Docker running locally; the chosen dataset CSV placed where the seed script expects it.
 
@@ -70,7 +75,7 @@ Where the SRS left a decision open, it's resolved below (marked **Decision**) so
 **Goal:** Non-blocking frontend tracker + efficient backend ingestion. No AI yet — just clean data collection.
 
 **Tasks**
-- [ ] `models/event.py` — `events` table
+- [ ] `models/event.py` — `events` SQLModel table
 - [ ] `static/js/tracker.js` — captures view/search/click/dwell; throttles/debounces high-frequency events; batches and flushes via `fetch(..., {keepalive: true})` (falls back to `sendBeacon` on page unload)
 - [ ] `routers/events.py` — ingestion endpoint accepting a batch, validated via Pydantic, bulk-inserted
 - [ ] Wire the tracker into catalog/detail/search templates
@@ -86,7 +91,7 @@ Where the SRS left a decision open, it's resolved below (marked **Decision**) so
 **Goal:** The actual recommendation engine — behavioral profile → retrieval → grounded generation — wired end to end, callable manually.
 
 **Tasks**
-- [ ] `models/recommendation.py` — `recommendations` table
+- [ ] `models/recommendation.py` — `recommendations` SQLModel table
 - [ ] `agent/nodes.py` — profile-building (recent events → interests/categories/repeated searches), Mesh embed of the profile query, Qdrant top-K retrieval, Mesh chat generation of narrative + product list
 - [ ] `routers/recommendations.py` — endpoint to view current recommendation + a manual "refresh" action
 - [ ] Recommendation display template (narrative + grounded product cards)
