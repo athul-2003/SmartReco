@@ -3,6 +3,7 @@ from sqlmodel import Session, select
 
 from app.models.event import Event, EventType
 from app.models.product import Product
+from app.models.recommendation import Recommendation
 from app.models.user import User
 
 
@@ -25,28 +26,45 @@ def test_recommendations_shows_empty_state_for_logged_in_user(client: TestClient
     response = client.get("/recommendations")
     assert response.status_code == 200
     assert "Your journey starts here" in response.text
-    # No tracked activity yet - nothing to generate from, so no refresh CTA.
-    assert "Generate My Recommendations" not in response.text
 
 
-def test_recommendations_empty_state_offers_generate_button_with_activity(
-    client: TestClient, session: Session
+def test_recommendations_auto_generates_on_first_visit_with_activity(
+    client: TestClient, session: Session, monkeypatch
 ):
-    # Regression test: a user who has browsed (has events) but has never
-    # hit refresh must have a way to trigger their first recommendation -
-    # previously the empty state only linked back to the catalog, with no
-    # path to /recommendations/refresh anywhere in the UI.
+    # A user who has browsed (has events) but has no recommendation yet
+    # should see one generated automatically on their first visit to
+    # /recommendations - no separate "generate" button/click required.
+    product = Product(
+        title="Python 101", description="Learn Python.", category="Dev", price=0
+    )
+    session.add(product)
+    session.commit()
+    session.refresh(product)
+
+    monkeypatch.setattr(
+        "app.routers.recommendations.generate_recommendation",
+        lambda s, u: ("Great fit for you.", [product.id]),
+    )
+
     _register(client, email="active-browser@example.com")
     user = session.exec(
         select(User).where(User.email == "active-browser@example.com")
     ).first()
-    session.add(Event(user_id=user.id, event_type=EventType.view, product_id=1))
+    session.add(
+        Event(user_id=user.id, event_type=EventType.view, product_id=product.id)
+    )
     session.commit()
 
     response = client.get("/recommendations")
     assert response.status_code == 200
-    assert "Generate My Recommendations" in response.text
-    assert 'action="/recommendations/refresh"' in response.text
+    assert "Great fit for you." in response.text
+    assert "Python 101" in response.text
+
+    # And it's persisted - a second visit doesn't need to regenerate.
+    recommendations = session.exec(
+        select(Recommendation).where(Recommendation.user_id == user.id)
+    ).all()
+    assert len(recommendations) == 1
 
 
 def test_recommendations_empty_state_links_to_catalog_categories(
