@@ -1,7 +1,9 @@
 from fastapi.testclient import TestClient
-from sqlmodel import Session
+from sqlmodel import Session, select
 
+from app.models.event import Event, EventType
 from app.models.product import Product
+from app.models.user import User
 
 
 def _register(client: TestClient, email: str = "user@example.com") -> None:
@@ -23,6 +25,28 @@ def test_recommendations_shows_empty_state_for_logged_in_user(client: TestClient
     response = client.get("/recommendations")
     assert response.status_code == 200
     assert "Your journey starts here" in response.text
+    # No tracked activity yet - nothing to generate from, so no refresh CTA.
+    assert "Generate My Recommendations" not in response.text
+
+
+def test_recommendations_empty_state_offers_generate_button_with_activity(
+    client: TestClient, session: Session
+):
+    # Regression test: a user who has browsed (has events) but has never
+    # hit refresh must have a way to trigger their first recommendation -
+    # previously the empty state only linked back to the catalog, with no
+    # path to /recommendations/refresh anywhere in the UI.
+    _register(client, email="active-browser@example.com")
+    user = session.exec(
+        select(User).where(User.email == "active-browser@example.com")
+    ).first()
+    session.add(Event(user_id=user.id, event_type=EventType.view, product_id=1))
+    session.commit()
+
+    response = client.get("/recommendations")
+    assert response.status_code == 200
+    assert "Generate My Recommendations" in response.text
+    assert 'action="/recommendations/refresh"' in response.text
 
 
 def test_recommendations_empty_state_links_to_catalog_categories(

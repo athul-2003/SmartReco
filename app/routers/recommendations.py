@@ -5,6 +5,7 @@ from sqlmodel import Session, select
 
 from app.agent.nodes import generate_recommendation
 from app.db import get_session
+from app.models.event import Event
 from app.models.product import Product
 from app.models.recommendation import Recommendation
 from app.models.user import User
@@ -41,10 +42,16 @@ def view_recommendations(
             .order_by(Product.category)
             .limit(STARTING_POINTS_LIMIT)
         ).all()
+        has_activity = (
+            session.exec(
+                select(Event.id).where(Event.user_id == user.id).limit(1)
+            ).first()
+            is not None
+        )
         return templates.TemplateResponse(
             request,
             "recommendations/empty.html",
-            {"user": user, "categories": categories},
+            {"user": user, "categories": categories, "has_activity": has_activity},
         )
 
     products = session.exec(
