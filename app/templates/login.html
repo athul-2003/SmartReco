@@ -1,16 +1,22 @@
 {% extends "base.html" %}
 {% block title %}Log in — SmartReco{% endblock %}
 {% block content %}
-<h1>Log in</h1>
-{% if error %}<p class="error">{{ error }}</p>{% endif %}
-<form action="/login" method="post" class="auth-form">
-  <label>Email
-    <input type="email" name="email" required autofocus>
-  </label>
-  <label>Password
-    <input type="password" name="password" required>
-  </label>
-  <button type="submit">Log in</button>
-</form>
-<p>Don't have an account? <a href="/register">Register</a></p>
+<div class="auth-shell">
+  <div class="auth-card">
+    <span class="brand-mark">S</span>
+    <h1>SmartReco</h1>
+    <p class="auth-subtitle">Sign in to browse the catalog and get personalized recommendations.</p>
+    {% if error %}<p class="error">{{ error }}</p>{% endif %}
+    <form action="/login" method="post" class="auth-form">
+      <label>Email Address
+        <input type="email" name="email" placeholder="hello@example.com" required autofocus>
+      </label>
+      <label>Password
+        <input type="password" name="password" required>
+      </label>
+      <button type="submit" class="btn btn-primary">Sign In</button>
+    </form>
+    <p class="auth-footer">Don't have an account? <a href="/register">Register</a></p>
+  </div>
+</div>
 {% endblock %}

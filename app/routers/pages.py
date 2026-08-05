@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.models.user import User
@@ -11,6 +11,8 @@ templates = Jinja2Templates(directory="app/templates")
 
 @router.get("/", response_class=HTMLResponse)
 def home(request: Request, user: User | None = Depends(get_current_user)):
+    if user is not None:
+        return RedirectResponse(url="/catalog", status_code=303)
     return templates.TemplateResponse(request, "home.html", {"user": user})
 
 

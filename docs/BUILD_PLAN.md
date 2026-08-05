@@ -112,6 +112,59 @@ Before starting Phase 3, per user request: reworked the Makefile's command names
 
 ---
 
+## Interim — Design System & UI Pass (before Phase 3)
+
+Before starting Phase 3, per user request: adopted a real design system (`docs/DESIGN.md`, generated via Stitch) and applied it to every template built in Phases 1–2, which had been bare unstyled HTML. This is a visual/UI-layer pass only — no Phase 3/4 business logic was added.
+
+**Tasks**
+- [x] `app/static/css/style.css` rewritten as CSS custom properties sourced from `docs/DESIGN.md`'s color/typography/spacing/radius/elevation tokens, plus a derived dark-mode palette (DESIGN.md only ships one palette; the dark variant reuses its `inverse-*`/`*-fixed-dim` tones)
+- [x] Geist + Inter fonts loaded via Google Fonts in `base.html`
+- [x] `app/services/ui.py::category_cover` — deterministic tonal cover + monogram for product cards, since the seeded dataset has no images (no schema/seed-script change; see Decision below)
+- [x] Restyled: `base.html` (nav), `login.html`, `register.html`, `home.html`, `catalog/browse.html`, `catalog/detail.html`, `admin.html`, `admin/products_list.html`, `admin/product_form.html`
+- [x] `catalog.py`'s `detail()` route gained a small `related` query (up to 3 other products in the same category) to power the "Related Courses" section
+- [x] `app/routers/recommendations.py` (new) + `templates/recommendations/empty.html` — `GET /recommendations`, login-gated, always renders the cold-start empty state (true for every user until Phase 4's `Recommendation` model/agent exist); registered in `main.py`
+- [x] Post-login/register redirect changed from `/` to `/catalog`; `/` now redirects authenticated visitors to `/catalog` and serves the marketing page only to anonymous ones
+- [x] `tests/test_ui.py`, `tests/test_recommendations.py` added; `tests/test_auth.py` updated for the new redirect target and admin-page copy
+
+**Decisions:**
+- **Post-login lands on the Catalog, not Recommendations.** Recommendations can't exist without behavioral data (FR-4.1), so a brand-new user has nothing to show there; browsing the catalog is what generates the events the whole pipeline depends on. "My Recommendations" is a persistent nav tab, not the landing page.
+- **No product images — generated tonal covers instead.** Sourcing real images (stock-photo API, Mesh image generation) would add an external dependency/cost never asked for in the SRS. `category_cover()` is pure, deterministic, and needs zero new infrastructure.
+- **`/recommendations` added now, scoped to the empty state only.** Flagged explicitly rather than silently skipping ahead: the route/nav link exist today, but only ever render the cold-start state — no fake data, no agent dependency. Phase 4 extends this same router file with the real populated view.
+- **Skill Level filter dropped** — not part of the SRS's `products` schema (FR-2.2); adding it would be an unflagged scope addition.
+- **AI Suggestion sidebar box kept as a static placeholder** (generic copy, not real AI output) rather than removed — visually reserves its spot for Phase 4 without pretending to be functional.
+- **Match-percentage badges (e.g. "98% Match") deferred to Phase 4, not added now** — but noted as *not* fabricated data: Qdrant already returns a real similarity score per retrieved point, so this can be a genuine number once retrieval exists.
+
+**Definition of done:** `uv run ruff check` and `uv run pytest` pass (full suite); manual walkthrough — logged-out `/` → register → lands on `/catalog` (cover art renders, no Skill Level filter, AI box shows placeholder copy) → product detail (Related Courses shows) → `/recommendations` (empty state, links back to catalog) → admin `/admin/products` (styled table, cover thumbnails) → create/edit/delete still dual-writes correctly.
+
+**Follow-up UI polish (same interim), per user feedback on the first pass:**
+- **Nav bar hidden entirely until login.** `base.html`'s `<nav>` is now wrapped in `{% if user %}` — anonymous visitors (home, login, register, and anonymous catalog/detail browsing) see zero header chrome, matching the Stitch mockup's login screen exactly. Chosen deliberately over two more conservative options (keep a slim brand+login bar everywhere, or only drop nav on the 3 auth pages) — the tradeoff: anonymous catalog/detail pages now have no persistent way back to `/` or `/login` beyond in-page links, which is an accepted, explicit choice, not an oversight.
+- **Real pagination** added to `/catalog` (`page` query param, `PAGE_SIZE=24`, truncated page-number list e.g. `1 … 4 5 6 … 63` via `_page_numbers()` in `catalog.py`) — the first pass only ever showed the first 24 products with no way to see the rest.
+- **Working sort** (`sort` query param: recommended/newest/price ascending/price descending) and **category counts** in the filter sidebar (`select(Product.category, func.count(Product.id)).group_by(...)`), both real queries, not decorative.
+- Added a decorative hero circle to the Catalog page and a hover-lift transition on product cards for closer visual parity with the Stitch reference.
+
+---
+
+## Interim — Docker Compose Hardening & Hot Reload (before Phase 3)
+
+Before starting Phase 3, per user request: set up hot reload for local dev (code changes were requiring a full `make up-build` rebuild every time — `docker-compose.yml` only bind-mounted `./data`, not the app code, and the Dockerfile's `CMD` had no `--reload`), and made the Compose setup itself more clearly production-ready.
+
+**Tasks**
+- [x] `Dockerfile` — added a non-root `appuser` (created, `chown -R` on `/app`, `USER appuser` before `CMD`) and a `HEALTHCHECK` using Python's stdlib `urllib` (no curl/wget needed in the slim image)
+- [x] `docker-compose.yml` — added `restart: unless-stopped`, healthchecks on both services (`app` via the same urllib probe; `qdrant` via its own `/readyz` endpoint, probed with bash's `/dev/tcp` since the official image ships no curl/wget — confirmed available: `bash`/`sh` present, verified live), `depends_on: qdrant: condition: service_healthy` (previously just waited for the container to *start*, not actually be ready), explicit `build.dockerfile`, and an `image:` tag for registry pushes
+- [x] `docker-compose.override.yml` (new) — bind-mounts `./app` and `./scripts` and overrides `app`'s command to add `--reload`. Compose auto-merges this file whenever `docker-compose.yml` is loaded (no `-f` flag needed), so `make up`/`make up-build` get hot reload for free; committed to the repo (shared dev tooling, not a personal override)
+- [x] `Makefile` — added `prod-build`/`prod-up`/`prod-down`, each passing `-f docker-compose.yml` explicitly to exclude the dev override (no bind mounts, no `--reload`) — this is the path a real deploy or CI/CD pipeline would use
+- [x] `.env.example` — clarified that `DATABASE_URL`/`QDRANT_URL` are host-oriented defaults only (for anything run with bare `uv run` outside Docker); Compose always overrides both to their in-network values regardless of what `.env` says, since "localhost" inside the app container is the container itself, not the Qdrant container or the bind-mounted data directory
+- [x] README's Getting Started section documents the hot-reload dev flow and the `prod-*` targets
+
+**Decisions:**
+- **`.env`'s `DATABASE_URL`/`QDRANT_URL` overrides in `docker-compose.yml` are intentional, not redundant.** They exist because `.env` has to serve two different contexts (host-run `uv` commands vs. the Docker Compose network) that can't share the same values — `localhost` means something different in each. This isn't something to "clean up" by deleting; it's the standard fix for that mismatch. Documented in both `.env.example` and `docker-compose.yml` itself so it doesn't look like an oversight again.
+- **No official Docker Compose skill was available to use for this** — this project's Library Skills mechanism (`AGENTS.md`) only covers FastAPI and SQLModel (both tiangolo packages); Docker isn't a Python package and doesn't publish one through that channel. Applied standard, well-established Compose conventions by hand instead (base + auto-merged `override.yml` for dev, healthchecks, non-root user).
+- **`docker-compose.override.yml` is committed**, not gitignored — it's meant as the team's shared default dev experience (auto-applied for everyone via `make up`), not an individual's personal-preference file, which is the other common convention for that filename.
+
+**Definition of done:** `make up-build` rebuilds and starts the stack with hot reload; editing a router/template/CSS file under `app/` on the host is reflected immediately with no rebuild; `docker compose ps` shows both services healthy; `make prod-build`/`make prod-up` (explicit `-f docker-compose.yml`) start the exact same image with no bind mounts and no `--reload`, confirming the base file alone is deploy-ready.
+
+---
+
 ## Phase 3 — Behavioral Tracking
 
 **Goal:** Non-blocking frontend tracker + efficient backend ingestion. No AI yet — just clean data collection.

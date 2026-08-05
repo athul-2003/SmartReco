@@ -205,6 +205,10 @@ Anyone can self-register a regular user via `/register` in the UI. There's no ad
 
 After the first `make up-build`, plain `make up` is enough unless dependencies or the Dockerfile changed. `make down` to stop, `make logs` to tail output, `make ps` for status.
 
+**Hot reload:** `make up`/`make up-build` auto-merge `docker-compose.override.yml`, which bind-mounts `app/` and `scripts/` into the container and runs uvicorn with `--reload` — edit a router, template, or `static/css` file on the host and the running app picks it up immediately, no rebuild needed. This override is dev-only; it's never used in production.
+
+**Production:** `make prod-build` / `make prod-up` / `make prod-down` run Compose with `-f docker-compose.yml` explicitly, excluding the dev override — no bind mounts, no `--reload`, the container runs the exact image that was built, with healthchecks and a `restart: unless-stopped` policy. The same `docker-compose.yml` is what you'd point a production host or CI/CD pipeline at.
+
 **Dev tooling** (needs [`uv`](https://github.com/astral-sh/uv) locally — tests run against an isolated in-memory DB with Mesh/Qdrant mocked, independent of the running stack):
 
 ```bash

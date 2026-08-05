@@ -1,8 +1,49 @@
 {% extends "base.html" %}
 {% block title %}{{ product.title }} — SmartReco{% endblock %}
 {% block content %}
-<p><a href="/catalog">&larr; Back to catalog</a></p>
-<h1>{{ product.title }}</h1>
-<p class="product-meta">{{ product.category }} · {{ "Free" if product.price == 0 else "₹%.2f"|format(product.price) }}</p>
-<p>{{ product.description }}</p>
+<a href="/catalog" class="back-link">&larr; Back to catalog</a>
+
+<div class="detail-layout">
+  <div>
+    <span class="chip">{{ product.category }}</span>
+    <h1>{{ product.title }}</h1>
+    <p>{{ product.description }}</p>
+
+    {% if related %}
+    <div class="related-section">
+      <h2>Related Courses</h2>
+      <div class="product-grid">
+        {% for item in related %}
+        {% set cover = item.category|cover %}
+        <a href="/catalog/{{ item.id }}" class="product-card">
+          <div class="product-cover {{ cover.tone_class }}">{{ cover.letter }}</div>
+          <div class="product-card-body">
+            <span class="chip">{{ item.category }}</span>
+            <h3>{{ item.title }}</h3>
+            <div class="product-meta">
+              <span>{{ "Free" if item.price == 0 else "₹%.2f"|format(item.price) }}</span>
+              <span>&rarr;</span>
+            </div>
+          </div>
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <aside class="overview-card">
+    <h3>Course Overview</h3>
+    <dl>
+      <div>
+        <dt>Price</dt>
+        <dd>{{ "Free" if product.price == 0 else "₹%.2f"|format(product.price) }}</dd>
+      </div>
+      <div>
+        <dt>Category</dt>
+        <dd>{{ product.category }}</dd>
+      </div>
+    </dl>
+  </aside>
+</div>
 {% endblock %}

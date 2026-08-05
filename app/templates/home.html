@@ -1,11 +1,10 @@
 {% extends "base.html" %}
 {% block title %}SmartReco{% endblock %}
 {% block content %}
-<h1>Welcome to SmartReco</h1>
-{% if user %}
-  <p>You're logged in as {{ user.email }}. The course catalog and your personalized recommendations land here in later phases.</p>
-{% else %}
-  <p>A behavioral AI recommendation agent for course discovery — grounded in a real catalog, never invented.</p>
-  <p><a href="/register">Create an account</a> or <a href="/login">log in</a> to get started.</p>
-{% endif %}
+<div class="hero">
+  <h1>Learning, tailored to how you actually browse.</h1>
+  <p>SmartReco watches what you view, search for, and linger on — then uses an agentic RAG recommendation engine to turn that behavior into personalized, persuasive course recommendations grounded in a real catalog, never invented.</p>
+  <a href="/register" class="btn btn-primary">Create an account</a>
+  <a href="/login" class="btn btn-ghost">Log in</a>
+</div>
 {% endblock %}

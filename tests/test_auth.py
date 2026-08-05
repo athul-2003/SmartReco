@@ -17,7 +17,7 @@ def register(
 def test_register_creates_user_and_starts_session(client: TestClient):
     response = register(client)
     assert response.status_code == 303
-    assert response.headers["location"] == "/"
+    assert response.headers["location"] == "/catalog"
 
     home = client.get("/")
     assert "user@example.com" in home.text
@@ -64,7 +64,7 @@ def test_logout_clears_session(client: TestClient):
 
     home = client.get("/")
     assert "user@example.com" not in home.text
-    assert "Login" in home.text
+    assert 'href="/login"' in home.text
 
 
 def test_admin_route_redirects_anonymous_to_login(client: TestClient):
@@ -88,4 +88,4 @@ def test_admin_route_allowed_for_admin_user(client: TestClient, session: Session
 
     response = client.get("/admin")
     assert response.status_code == 200
-    assert "Admin Area" in response.text
+    assert "Course Management" in response.text
