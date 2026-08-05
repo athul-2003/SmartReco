@@ -186,41 +186,29 @@ smartreco/
 ## Getting Started
 
 **Prerequisites:**
-- Python 3.11+ with [`uv`](https://github.com/astral-sh/uv)
-- Docker (for `docker compose`, and/or to run Qdrant locally from Phase 2 onward)
+- Docker + `make`
 - A valid Mesh API key (prefixed `rsk_`)
-- `make` (optional — every command below also has a plain `uv`/`docker compose` equivalent)
 
-**Option A — local (`uv`):**
-
-```bash
-uv sync                    # or: make install
-cp .env.example .env       # then fill in MESH_API_KEY
-
-docker compose up -d qdrant             # Qdrant only, for local (non-Docker) app runs
-uv run python scripts/seed_catalog.py   # or: make seed - seeds ~1,500 products into SQLite + Qdrant
-
-uv run uvicorn app.main:app --reload   # or: make run
-```
-
-App runs at http://localhost:8000 — register an account, browse/search the catalog at `/catalog`, and (as an admin) manage products at `/admin/products`. Behavioral tracking and recommendations land in later phases.
-
-**Option B — fully containerized (`docker compose`):**
+**`make` + Docker Compose is the only supported way to run the project** — it keeps the app and Qdrant on identical config (SQLite path, `QDRANT_URL`) with no local/container drift to reason about.
 
 ```bash
 cp .env.example .env       # then fill in MESH_API_KEY
-make docker-up             # or: docker compose up -d
-uv run python scripts/seed_catalog.py   # seeds against the containerized Qdrant (QDRANT_URL in .env points at localhost:6333, exposed by the container)
+make up-build               # builds the app image, then starts app + Qdrant
+make seed                   # seeds ~1,500 products into SQLite + Qdrant (run once the stack is up)
 ```
 
-This starts both the app (http://localhost:8000) and Qdrant (http://localhost:6333/dashboard) as one stack. `make docker-down` to stop.
+- App: http://localhost:8000 — register an account, browse/search the catalog at `/catalog`, and (as an admin) manage products at `/admin/products`.
+- Qdrant dashboard: http://localhost:6333/dashboard
 
-**Running tests / lint:**
+After the first `make up-build`, plain `make up` is enough unless dependencies or the Dockerfile changed. `make down` to stop, `make logs` to tail output, `make ps` for status.
+
+**Dev tooling** (needs [`uv`](https://github.com/astral-sh/uv) locally — tests run against an isolated in-memory DB with Mesh/Qdrant mocked, independent of the running stack):
 
 ```bash
-make test    # or: uv run pytest
-make lint    # or: uv run ruff check app scripts tests
-make fmt     # or: uv run ruff format app scripts tests
+make install   # uv sync - needed once, for the commands below
+make test      # uv run pytest
+make lint      # uv run ruff check app scripts tests
+make fmt       # uv run ruff format app scripts tests
 ```
 
 Run `make help` for the full list of available commands.

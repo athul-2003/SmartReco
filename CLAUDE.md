@@ -21,6 +21,12 @@ SmartReco is a behavioral AI recommendation platform built for the SmartReco Bui
 6. A phase is not "done" until its Definition of Done in `BUILD_PLAN.md` is met, its tests pass (see below), and it's merged to `main` via PR.
 7. Don't bundle multiple phases into one branch/PR. One phase = one branch = one PR (a phase can be split into more than one PR if it's large, but never merge phases together).
 
+## Running the Project
+
+**`make` + Docker Compose is the only supported way to run or manually test the running app** — `make up-build` (or `make up` once an image already exists), `make seed`, `make down`, `make logs`, `make ps`. This applies to Claude Code too: don't run `uv run uvicorn ...` directly or start Qdrant standalone. A host-run process and a containerized one use different SQLite files by design (`docker-compose.yml`'s env overrides only apply inside the container), which drifted out of sync during Phase 2 verification — exactly the kind of split-brain state the project's dual-write discipline is meant to avoid elsewhere. One path removes the ambiguity. See `Makefile` (`make help`) for the full command list.
+
+`uv run pytest`/`ruff` (or their `make test`/`make lint`/`make fmt` equivalents) are the exception — they run against an isolated in-memory DB with Mesh/Qdrant mocked, so they're independent of whatever the running stack's state is.
+
 ## Testing Requirements
 
 Every phase has both automated and manual verification. Do not open a PR until both are done.
