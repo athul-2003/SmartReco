@@ -72,3 +72,17 @@ def count() -> int:
     ensure_collection()
     client = get_qdrant_client()
     return client.count(collection_name=COLLECTION_NAME).count
+
+
+def search(vector: list[float], top_k: int = 5) -> list[dict]:
+    """Top-K semantic search (FR-4.2) - returns real catalog product IDs plus
+    their payload and similarity score, never invented data."""
+    ensure_collection()
+    client = get_qdrant_client()
+    results = client.query_points(
+        collection_name=COLLECTION_NAME, query=vector, limit=top_k
+    )
+    return [
+        {"id": point.id, "score": point.score, **point.payload}
+        for point in results.points
+    ]
