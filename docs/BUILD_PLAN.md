@@ -42,17 +42,18 @@ Where the SRS left a decision open, it's resolved below (marked **Decision**) so
 - [x] `Dockerfile` — containerize the FastAPI app (uv-based build)
 - [x] `docker-compose.yml` — orchestrates the app + Qdrant (brought forward from Phase 2, since both are needed for a one-command dev environment) with a named volume for Qdrant storage and a bind-mounted SQLite data dir
 - [x] `.dockerignore`
-- [x] `Makefile` — standard entry points (`install`, `run`, `test`, `lint`, `fmt`, `docker-build`, `docker-up`, `docker-down`, `docker-logs`, `seed`, `clean`) so the project is runnable without memorizing `uv`/`docker compose` invocations
+- [x] `Makefile` — standard entry points so the project is runnable without memorizing `uv`/`docker compose` invocations (renamed to `up`/`up-build`/`down`/`build`/`logs`/`ps` — see "Interim — Makefile rework" after Phase 2)
 
 **Decisions:**
 - Sessions are **signed-cookie based** (`SessionMiddleware`), not DB-backed — simplest option that satisfies FR-1.3 without an extra table.
 - ORM is **SQLModel**, not raw SQLAlchemy — one class serves as both the DB table and the Pydantic schema, still SQLite → Postgres via `DATABASE_URL`. Database access stays **synchronous** (SQLModel supports async, but sync is simpler and adequate at hackathon scale/demo reliability).
 - **Dockerized from Phase 1 onward**, not deferred to Phase 7 polish — the SRS explicitly values a frictionless "clone and run" reviewer experience (Sec. 2.1), and Qdrant already requires Docker for local dev (Sec 2.3/2.4), so wiring both the app and Qdrant into one `docker-compose.yml` now avoids doing this twice. The Qdrant service is defined now even though the app doesn't call it until Phase 2 — harmless to have running early.
-- **Makefile added as the standard run interface** — wraps `uv`/`docker compose` commands so setup is `make install && make run` (or `make docker-up` for the fully containerized path) rather than needing to know the underlying tool invocations.
+- **Makefile added as the standard run interface** — wraps `uv`/`docker compose` commands rather than needing to know the underlying tool invocations. (Command names later revised — see "Interim — Makefile rework" after Phase 2.)
 - Adopted **Library Skills** (`AGENTS.md`) for FastAPI/SQLModel — official, version-synced coding-agent guidance bundled directly with those packages; installed into `.claude/skills/` and refreshed on every upgrade. On Windows, symlink installation needs Developer Mode/admin (`WinError 1314`) — fall back to `--copy` (see `AGENTS.md`); installed skills are gitignored either way since they're regenerated from packages, not authored content.
 - **Pinned `bcrypt<4.1`** — `passlib[bcrypt]`'s version-detection breaks against bcrypt ≥4.1 (`ValueError: password cannot be longer than 72 bytes` during passlib's own self-test, a known upstream incompatibility since passlib is unmaintained). Pinning is the standard workaround; revisit if passlib ever ships a fix, or consider dropping passlib for direct `bcrypt` use if this recurs.
 - **Ruff configured with `extend-immutable-calls` for FastAPI's param functions** (`Depends`, `Query`, `Form`, etc.) — otherwise `ruff check` flags every dependency-injected route parameter as bug-prone (B008), which is a false positive for FastAPI's actual, required pattern. Documented, standard fix rather than scattering `# noqa` comments.
 - **GNU Make installed via `winget install ezwinports.make`** for local Windows use — the Makefile itself is portable (works as-is in CI/WSL/Mac/Linux); this was just making `make` available on this dev machine.
+
 **Definition of done:** ✅ Verified. Can register, log in, see a role-aware page, log out — confirmed via `pytest` (8/8 passing), manual curl flow, and browser-equivalent cookie-jar flow. `uv run uvicorn app.main:app --reload` serves it end to end. `docker compose build && docker compose up -d` also verified live: both containers start, `/`, `/admin` (redirects anonymous), and Qdrant's API all respond correctly, and a full register → session → home flow works against the containerized app with the SQLite file persisting correctly through the bind mount. `make lint`/`make test` confirmed working.
 
 **Phase 1 status: ✅ Complete.**
@@ -84,11 +85,27 @@ Where the SRS left a decision open, it's resolved below (marked **Decision**) so
 - **`seed_catalog.py` needs `sys.path` patched** — running it as `python scripts/seed_catalog.py` (the documented, SRS-matching invocation) only puts `scripts/` on `sys.path`, not the project root, so bare `app.*` imports fail. Fixed with an explicit `sys.path.insert(0, ...)` at the top of the script rather than changing the documented command to module form (`-m scripts.seed_catalog`).
 - **Dockerfile `CMD` changed to `uv run --no-sync ...`** — plain `uv run` re-syncs the environment (including the `dev` dependency group: ruff, pytest) on every container start, adding ~15s and installing tools the running app never needs. Dependencies are already correct from the build-time `uv sync --no-dev` layers; `--no-sync` skips the redundant runtime check entirely.
 
-**You provide:** Docker running locally (already satisfied via `make docker-up`). Dataset sourcing no longer needs anything from you — it's committed to the repo.
+**You provide:** Docker running locally (already satisfied via `make up`). Dataset sourcing no longer needs anything from you — it's committed to the repo.
 
 **Definition of done:** ✅ Verified. `uv run python scripts/seed_catalog.py` run live against real Mesh + local Qdrant: 1,500/1,500 SQL↔Qdrant sync confirmed directly against both stores; re-running immediately confirmed resumability (all 1,500 skipped, "Nothing new to seed"). Admin dual-write verified live (not mocked): created a real product through `/admin/products/new` → Qdrant `points_count` 1500→1501 with a real Mesh embedding; deleted it → back to 1500. All 24 automated tests pass (`pytest`), `ruff check`/`format` clean. Full `docker compose build && up` verified: app + Qdrant both healthy, `/`, `/catalog`, `/catalog?category=...` all respond correctly through the container.
 
 **Phase 2 status: ✅ Complete.**
+
+---
+
+## Interim — Makefile Rework & Manual Phase 1–2 Verification
+
+Before starting Phase 3, per user request: reworked the Makefile's command names to the standard Docker Compose convention, and made Docker Compose the **sole supported way to run the project** (dropped the parallel "local `uv run uvicorn`" path from the README as a first-class option).
+
+**Tasks**
+- [x] Renamed Makefile targets to `up` / `up-build` / `down` / `build` / `logs` / `ps` (previously `docker-up` / `docker-build` / `docker-down` / `docker-logs`, no direct `up-build` equivalent existed)
+- [x] `make seed` now runs **inside the running app container** (`docker compose exec app uv run --no-sync python scripts/seed_catalog.py`) instead of on the host — this was a latent bug: a host-run seed script writes to the host's `smartreco.db`, not the container's bind-mounted `/app/data/smartreco.db`, so the containerized app would never actually see the seeded data. Running it via `exec` guarantees it uses the exact same `DATABASE_URL`/`QDRANT_URL` the running app does.
+- [x] README `Getting Started` rewritten around the single `make up-build && make seed` flow; dev tooling (`test`/`lint`/`fmt`) kept as local `uv run` commands since they don't touch the running app/DB at all (isolated in-memory DB, mocked Mesh/Qdrant)
+- [x] Manual UI walkthrough of everything built in Phases 0–2 (see Decision below)
+
+**Decision:** **Docker Compose is now the only sanctioned way to run or manually test the project** (including for Claude Code itself, in this and future sessions) — no more switching between a local `uv run uvicorn` process and a containerized one. Reason: the two paths use different SQLite files by design (host path vs. container bind mount), which silently drifted out of sync during Phase 2 verification and is exactly the kind of split-brain state the project's own dual-write discipline is trying to avoid elsewhere. One path removes the ambiguity entirely.
+
+**Definition of done:** `make up-build` boots a clean stack; `make seed` populates it correctly; a manual browser/curl walkthrough of registration, login, role-gated `/admin`, catalog browse/search/filter, and admin product CRUD all work against that single running stack.
 
 ---
 
