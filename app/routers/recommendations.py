@@ -27,6 +27,29 @@ def _latest_recommendation(session: Session, user: User) -> Recommendation | Non
     ).first()
 
 
+def _has_activity(session: Session, user: User) -> bool:
+    return (
+        session.exec(select(Event.id).where(Event.user_id == user.id).limit(1)).first()
+        is not None
+    )
+
+
+def _generate_and_store(
+    session: Session, user: User, trigger_reason: str
+) -> Recommendation:
+    narrative, product_ids = generate_recommendation(session, user)
+    recommendation = Recommendation(
+        user_id=user.id,
+        narrative=narrative,
+        product_ids=product_ids,
+        trigger_reason=trigger_reason,
+    )
+    session.add(recommendation)
+    session.commit()
+    session.refresh(recommendation)
+    return recommendation
+
+
 @router.get("", response_class=HTMLResponse)
 def view_recommendations(
     request: Request,
@@ -36,23 +59,23 @@ def view_recommendations(
     recommendation = _latest_recommendation(session, user)
 
     if recommendation is None:
-        categories = session.exec(
-            select(Product.category)
-            .distinct()
-            .order_by(Product.category)
-            .limit(STARTING_POINTS_LIMIT)
-        ).all()
-        has_activity = (
-            session.exec(
-                select(Event.id).where(Event.user_id == user.id).limit(1)
-            ).first()
-            is not None
-        )
-        return templates.TemplateResponse(
-            request,
-            "recommendations/empty.html",
-            {"user": user, "categories": categories, "has_activity": has_activity},
-        )
+        if _has_activity(session, user):
+            # First visit with real behavior to draw on - generate right
+            # away rather than making the user click a separate button
+            # just to see what they already have data for.
+            recommendation = _generate_and_store(session, user, "manual")
+        else:
+            categories = session.exec(
+                select(Product.category)
+                .distinct()
+                .order_by(Product.category)
+                .limit(STARTING_POINTS_LIMIT)
+            ).all()
+            return templates.TemplateResponse(
+                request,
+                "recommendations/empty.html",
+                {"user": user, "categories": categories},
+            )
 
     products = session.exec(
         select(Product).where(Product.id.in_(recommendation.product_ids))
@@ -77,13 +100,5 @@ def refresh_recommendations(
     user: User = Depends(require_login),
     session: Session = Depends(get_session),
 ):
-    narrative, product_ids = generate_recommendation(session, user)
-    recommendation = Recommendation(
-        user_id=user.id,
-        narrative=narrative,
-        product_ids=product_ids,
-        trigger_reason="manual",
-    )
-    session.add(recommendation)
-    session.commit()
+    _generate_and_store(session, user, "manual")
     return RedirectResponse(url="/recommendations", status_code=303)
