@@ -30,7 +30,8 @@ venv/
 .claude/
 
 # Docker bind-mounted app data (SQLite file when running via docker-compose)
-data/
+# Anchored to repo root only - scripts/data/ holds the committed seed dataset.
+/data/
 
 # IDE / OS
 .vscode/

@@ -1,0 +1,152 @@
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
+from sqlmodel import Session, select
+
+from app.db import get_session
+from app.models.product import Product
+from app.models.user import User
+from app.services import catalog
+from app.services.auth import require_admin
+
+router = APIRouter(prefix="/admin/products")
+templates = Jinja2Templates(directory="app/templates")
+
+
+@router.get("", response_class=HTMLResponse)
+def list_products(
+    request: Request,
+    user: User = Depends(require_admin),
+    session: Session = Depends(get_session),
+):
+    products = session.exec(select(Product).order_by(Product.id.desc())).all()
+    return templates.TemplateResponse(
+        request, "admin/products_list.html", {"user": user, "products": products}
+    )
+
+
+@router.get("/new", response_class=HTMLResponse)
+def new_product_form(request: Request, user: User = Depends(require_admin)):
+    return templates.TemplateResponse(
+        request,
+        "admin/product_form.html",
+        {"user": user, "product": None, "mode": "create"},
+    )
+
+
+@router.post("/new")
+def create_product(
+    request: Request,
+    title: str = Form(...),
+    description: str = Form(...),
+    category: str = Form(...),
+    price: float = Form(0.0),
+    user: User = Depends(require_admin),
+    session: Session = Depends(get_session),
+):
+    try:
+        catalog.create_product(
+            session,
+            title=title,
+            description=description,
+            category=category,
+            price=price,
+        )
+    except catalog.DualWriteError as exc:
+        return templates.TemplateResponse(
+            request,
+            "admin/product_form.html",
+            {
+                "user": user,
+                "product": {
+                    "title": title,
+                    "description": description,
+                    "category": category,
+                    "price": price,
+                },
+                "mode": "create",
+                "error": str(exc),
+            },
+            status_code=502,
+        )
+    return RedirectResponse(url="/admin/products", status_code=303)
+
+
+def _get_product_or_404(session: Session, product_id: int) -> Product:
+    product = session.get(Product, product_id)
+    if product is None:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return product
+
+
+@router.get("/{product_id}/edit", response_class=HTMLResponse)
+def edit_product_form(
+    request: Request,
+    product_id: int,
+    user: User = Depends(require_admin),
+    session: Session = Depends(get_session),
+):
+    product = _get_product_or_404(session, product_id)
+    return templates.TemplateResponse(
+        request,
+        "admin/product_form.html",
+        {"user": user, "product": product, "mode": "edit"},
+    )
+
+
+@router.post("/{product_id}/edit")
+def update_product(
+    request: Request,
+    product_id: int,
+    title: str = Form(...),
+    description: str = Form(...),
+    category: str = Form(...),
+    price: float = Form(0.0),
+    user: User = Depends(require_admin),
+    session: Session = Depends(get_session),
+):
+    product = _get_product_or_404(session, product_id)
+    try:
+        catalog.update_product(
+            session,
+            product,
+            title=title,
+            description=description,
+            category=category,
+            price=price,
+        )
+    except catalog.DualWriteError as exc:
+        return templates.TemplateResponse(
+            request,
+            "admin/product_form.html",
+            {
+                "user": user,
+                "product": {
+                    "id": product_id,
+                    "title": title,
+                    "description": description,
+                    "category": category,
+                    "price": price,
+                },
+                "mode": "edit",
+                "error": str(exc),
+            },
+            status_code=502,
+        )
+    return RedirectResponse(url="/admin/products", status_code=303)
+
+
+@router.post("/{product_id}/delete")
+def delete_product(
+    product_id: int,
+    user: User = Depends(require_admin),
+    session: Session = Depends(get_session),
+):
+    product = _get_product_or_404(session, product_id)
+    try:
+        catalog.delete_product(session, product)
+    except catalog.DualWriteError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return RedirectResponse(
+        url="/admin/products", status_code=status.HTTP_303_SEE_OTHER
+    )
