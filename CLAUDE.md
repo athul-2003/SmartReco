@@ -9,6 +9,7 @@ SmartReco is a behavioral AI recommendation platform built for the SmartReco Bui
 - [`README.md`](README.md) — project overview, architecture, tech stack.
 - [`docs/SmartReco_SRS.docx`](docs/SmartReco_SRS.docx) — the **ultimate source of truth** for requirements. If anything else in the repo (including `BUILD_PLAN.md`) ever conflicts with it, the SRS wins and the conflicting doc gets corrected.
 - [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md) — the **mandatory** phase-by-phase execution path, derived from the SRS. Phases run strictly in the order it defines — do not skip ahead, reorder, or invent scope outside it without flagging the addition to the user first.
+- [`ACTIVITYLOG.md`](ACTIVITYLOG.md) — chronological continuity log of work done and standing instructions given, so context survives across separate chat sessions. **Read it first, at the start of any new session or task.** See [Activity Log](#activity-log) below.
 - [`AGENTS.md`](AGENTS.md) — official, version-synced AI coding-agent skills for this project's core libraries (FastAPI, SQLModel), installed via Library Skills. See [AI Agent Skills](#ai-agent-skills) below.
 
 ## How to Execute Phases
@@ -20,6 +21,14 @@ SmartReco is a behavioral AI recommendation platform built for the SmartReco Bui
 5. If a phase surfaces an ambiguity the SRS doesn't resolve, make the pragmatic call yourself (matching the precedent already set in `BUILD_PLAN.md`'s "Decision" callouts) and record what was decided and why in the PR description **and** in `BUILD_PLAN.md` itself — don't block the phase on it unless it's a genuinely consequential, hard-to-reverse choice.
 6. A phase is not "done" until its Definition of Done in `BUILD_PLAN.md` is met, its tests pass (see below), and it's merged to `main` via PR.
 7. Don't bundle multiple phases into one branch/PR. One phase = one branch = one PR (a phase can be split into more than one PR if it's large, but never merge phases together).
+
+## Activity Log
+
+[`ACTIVITYLOG.md`](ACTIVITYLOG.md) exists so a new chat session — which starts with none of this conversation's context — can pick up where the last one left off, without re-deriving it from git history.
+
+- **Read it at the start of any new session or non-trivial task**, before starting work: check "Current Status" for where things stand, and "Standing Instructions From You" for anything not captured elsewhere.
+- **Update it as work happens**, not just at the end of a big task: append a dated entry to the Activity Log for anything a future session would need to know about (a phase completed, a non-obvious decision made, a new standing instruction from the user), and keep "Current Status" current.
+- It does **not** replace `BUILD_PLAN.md` (phase/task tracking) or the SRS (requirements) — if either ever conflicts with this file on *what to build*, they win. This file only tracks *what happened and when*.
 
 ## Running the Project
 
