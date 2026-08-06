@@ -285,6 +285,36 @@ def test_view_recommendations_skips_ids_no_longer_in_catalog(
     assert view.status_code == 200
 
 
+def test_refresh_handles_mesh_failure_gracefully(
+    client: TestClient, session: Session, monkeypatch
+):
+    # A Mesh/Qdrant failure during refresh must not surface as a raw 500 -
+    # the user has a valid cached recommendation to keep seeing instead.
+    def _boom(s, u, **kw):
+        raise RuntimeError("Mesh is down")
+
+    monkeypatch.setattr("app.routers.recommendations.generate_recommendation", _boom)
+
+    _register(client, email="refresh-fails@example.com")
+    user = session.exec(
+        select(User).where(User.email == "refresh-fails@example.com")
+    ).first()
+    session.add(
+        Recommendation(user_id=user.id, narrative="Existing narrative.", product_ids=[])
+    )
+    session.commit()
+
+    response = client.post("/recommendations/refresh", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/recommendations?error=refresh_failed"
+
+    view = client.get("/recommendations?error=refresh_failed")
+    assert view.status_code == 200
+    assert "refresh your recommendations just now" in view.text
+    # The prior recommendation is untouched, not overwritten with a broken one.
+    assert "Existing narrative." in view.text
+
+
 def test_refresh_passes_category_and_max_price_filters_through(
     client: TestClient, session: Session, monkeypatch
 ):
@@ -388,6 +418,38 @@ def test_view_recommendations_auto_regenerates_at_event_threshold(
     assert "Advanced Python" in response.text
     assert 'data-trigger-reason="threshold"' in response.text
     assert "Stale narrative." not in response.text
+
+
+def test_view_recommendations_falls_back_to_cache_when_auto_regenerate_retrieval_fails(
+    client: TestClient, session: Session, monkeypatch
+):
+    # A Mesh/Qdrant failure during the auto-regenerate-at-threshold retrieval
+    # has a safe fallback available (the still-valid cached recommendation)
+    # - it must degrade to that, not crash the page with a raw 500.
+    def _boom(s, u):
+        raise RuntimeError("Mesh is down")
+
+    monkeypatch.setattr("app.routers.recommendations.prepare_candidates", _boom)
+
+    _register(client, email="threshold-fails@example.com")
+    user = session.exec(
+        select(User).where(User.email == "threshold-fails@example.com")
+    ).first()
+    session.add(
+        Recommendation(
+            user_id=user.id,
+            narrative="Still-valid cached narrative.",
+            product_ids=[],
+            created_at=datetime.now(UTC) - timedelta(minutes=5),
+        )
+    )
+    for _ in range(EVENT_THRESHOLD):
+        session.add(Event(user_id=user.id, event_type=EventType.view))
+    session.commit()
+
+    response = client.get("/recommendations")
+    assert response.status_code == 200
+    assert "Still-valid cached narrative." in response.text
 
 
 def test_stream_narrative_persists_threshold_trigger_reason(

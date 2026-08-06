@@ -1,3 +1,5 @@
+import logging
+import time
 from collections.abc import Iterator
 from functools import lru_cache
 
@@ -5,9 +7,13 @@ from openai import OpenAI
 
 from app.config import get_settings
 
+logger = logging.getLogger(__name__)
+
 MESH_BASE_URL = "https://api.meshapi.ai/v1"
 EMBED_MODEL = "sentence-transformers/all-minilm-l6-v2"
 CHAT_MODEL = "openai/chat-latest"
+CHAT_MAX_RETRIES = 3
+CHAT_BACKOFF_BASE_SECONDS = 2
 
 
 class LLMClient:
@@ -23,10 +29,33 @@ class LLMClient:
         return [item.embedding for item in response.data]
 
     def chat(self, messages: list[dict[str, str]]) -> str:
-        response = self._client.chat.completions.create(
-            model=CHAT_MODEL, messages=messages
-        )
-        return response.choices[0].message.content or ""
+        """Non-streaming chat completion, with light retry/backoff on
+        transient failures - mirrors embeddings.py's embed retry. Unlike
+        embed() (already retried once by embeddings.py's own wrapper, so
+        retrying again here would double it), nothing else protects this
+        call - chat_stream() deliberately has no retry of its own, since a
+        caller streaming partial tokens can't transparently retry mid-stream
+        (see recommendations.py's /stream route, which instead catches and
+        keeps whatever text already arrived)."""
+        last_error: Exception | None = None
+        for attempt in range(CHAT_MAX_RETRIES):
+            try:
+                response = self._client.chat.completions.create(
+                    model=CHAT_MODEL, messages=messages
+                )
+                return response.choices[0].message.content or ""
+            except Exception as exc:  # noqa: BLE001 - retry on any Mesh/network failure
+                last_error = exc
+                wait = CHAT_BACKOFF_BASE_SECONDS * (2**attempt)
+                logger.warning(
+                    "Chat completion failed (attempt %d/%d): %s - retrying in %ds",
+                    attempt + 1,
+                    CHAT_MAX_RETRIES,
+                    exc,
+                    wait,
+                )
+                time.sleep(wait)
+        raise last_error
 
     def chat_stream(self, messages: list[dict[str, str]]) -> Iterator[str]:
         """Yields narrative text as it's generated, instead of waiting for

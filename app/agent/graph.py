@@ -13,7 +13,7 @@ incrementally (Phase 4 follow-up #3), which a single graph.invoke() call
 would block on end-to-end and undo.
 """
 
-from langgraph.graph import END, StateGraph
+from langgraph.graph import END, START, StateGraph
 from sqlmodel import Session
 from typing_extensions import TypedDict
 
@@ -91,7 +91,7 @@ def _build_graph():
     graph.add_node("analyze", _analyze)
     graph.add_node("retrieve", _retrieve)
     graph.add_node("generate", _generate)
-    graph.set_entry_point("analyze")
+    graph.add_edge(START, "analyze")
     graph.add_edge("analyze", "retrieve")
     graph.add_conditional_edges(
         "retrieve", _evaluate_retrieval, {"refine": "retrieve", "generate": "generate"}
