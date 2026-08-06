@@ -39,9 +39,9 @@ def new_product_form(request: Request, user: User = Depends(require_admin)):
 @router.post("/new")
 def create_product(
     request: Request,
-    title: str = Form(...),
-    description: str = Form(...),
-    category: str = Form(...),
+    title: str = Form(),
+    description: str = Form(),
+    category: str = Form(),
     price: float = Form(0.0),
     user: User = Depends(require_admin),
     session: Session = Depends(get_session),
@@ -100,9 +100,9 @@ def edit_product_form(
 def update_product(
     request: Request,
     product_id: int,
-    title: str = Form(...),
-    description: str = Form(...),
-    category: str = Form(...),
+    title: str = Form(),
+    description: str = Form(),
+    category: str = Form(),
     price: float = Form(0.0),
     user: User = Depends(require_admin),
     session: Session = Depends(get_session),
