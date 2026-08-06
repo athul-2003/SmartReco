@@ -13,6 +13,8 @@ incrementally (Phase 4 follow-up #3), which a single graph.invoke() call
 would block on end-to-end and undo.
 """
 
+import logging
+
 from langgraph.graph import END, START, StateGraph
 from sqlmodel import Session
 from typing_extensions import TypedDict
@@ -26,6 +28,8 @@ from app.agent.nodes import (
     retrieve_candidates,
 )
 from app.models.user import User
+
+logger = logging.getLogger(__name__)
 
 # Qdrant cosine-similarity score below which the top candidate is considered
 # a weak match, worth one broader retrieval attempt before generating.
@@ -127,5 +131,12 @@ def run_recommendation_graph(
             "narrative": "",
             "product_ids": [],
         }
+    )
+    logger.info(
+        "LangGraph agent run complete for user_id=%s: %d product(s) after %d "
+        "retrieval attempt(s)",
+        user.id,
+        len(result["product_ids"]),
+        result["retrieval_attempts"],
     )
     return result["narrative"], result["product_ids"]

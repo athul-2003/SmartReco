@@ -182,7 +182,7 @@ smartreco/
     static/
       css/style.css                # the whole design system (tokens, components, light/dark)
       js/tracker.js                 # non-blocking, batched/throttled behavioral tracker
-      js/recommendations-stream.js   # SSE client for the streaming narrative
+      js/recommendations-generate.js   # fetches candidates async, then streams the narrative
       js/password-toggle.js           # login/register password show/hide toggle
   scripts/
     mesh_spike.py               # Phase 0 connectivity check (throwaway)
