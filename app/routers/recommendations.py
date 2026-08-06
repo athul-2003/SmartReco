@@ -5,11 +5,11 @@ from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
 
+from app.agent.graph import run_recommendation_graph as generate_recommendation
 from app.agent.nodes import (
     NO_ACTIVITY_NARRATIVE,
     build_profile,
     generate_narrative_stream,
-    generate_recommendation,
     prepare_candidates,
 )
 from app.agent.triggers import should_auto_regenerate
