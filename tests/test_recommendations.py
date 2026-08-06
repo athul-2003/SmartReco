@@ -255,7 +255,7 @@ def test_refresh_creates_recommendation_and_shows_grounded_products(
 
     monkeypatch.setattr(
         "app.routers.recommendations.generate_recommendation",
-        lambda s, u: ("Great fit for you.", [product.id]),
+        lambda s, u, **kw: ("Great fit for you.", [product.id]),
     )
 
     _register(client)
@@ -276,7 +276,7 @@ def test_view_recommendations_skips_ids_no_longer_in_catalog(
     # render fabricated data - the display is always re-grounded against SQL.
     monkeypatch.setattr(
         "app.routers.recommendations.generate_recommendation",
-        lambda s, u: ("x", [99999]),
+        lambda s, u, **kw: ("x", [99999]),
     )
     _register(client)
     client.post("/recommendations/refresh")
@@ -285,12 +285,31 @@ def test_view_recommendations_skips_ids_no_longer_in_catalog(
     assert view.status_code == 200
 
 
+def test_refresh_passes_category_and_max_price_filters_through(
+    client: TestClient, session: Session, monkeypatch
+):
+    received = {}
+
+    def fake_generate_recommendation(s, u, **kw):
+        received.update(kw)
+        return "x", []
+
+    monkeypatch.setattr(
+        "app.routers.recommendations.generate_recommendation",
+        fake_generate_recommendation,
+    )
+    _register(client)
+    client.post("/recommendations/refresh?category=Dev&max_price=500")
+
+    assert received == {"category": "Dev", "max_price": 500.0}
+
+
 def test_refresh_stores_manual_trigger_reason(
     client: TestClient, session: Session, monkeypatch
 ):
     monkeypatch.setattr(
         "app.routers.recommendations.generate_recommendation",
-        lambda s, u: ("x", []),
+        lambda s, u, **kw: ("x", []),
     )
     _register(client)
     client.post("/recommendations/refresh")

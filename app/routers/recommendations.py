@@ -205,9 +205,16 @@ def stream_narrative(
 
 @router.post("/refresh")
 def refresh_recommendations(
+    category: str | None = None,
+    max_price: float | None = None,
     user: User = Depends(require_login),
     session: Session = Depends(get_session),
 ):
-    narrative, product_ids = generate_recommendation(session, user)
+    """`category`/`max_price` are optional, narrowing retrieval to matching
+    products (Phase 6 bonus: metadata filtering) - omitted, refresh behaves
+    exactly as before."""
+    narrative, product_ids = generate_recommendation(
+        session, user, category=category, max_price=max_price
+    )
     _store_recommendation(session, user, narrative, product_ids)
     return RedirectResponse(url="/recommendations", status_code=303)
