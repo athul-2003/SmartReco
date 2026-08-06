@@ -74,7 +74,7 @@ def test_retrieve_candidates_embeds_profile_and_queries_qdrant(monkeypatch):
     monkeypatch.setattr(
         nodes.vector_store,
         "search",
-        lambda vector, top_k=5: [
+        lambda vector, top_k=5, **kw: [
             {
                 "id": 1,
                 "title": "Python 101",
@@ -87,3 +87,20 @@ def test_retrieve_candidates_embeds_profile_and_queries_qdrant(monkeypatch):
     profile = nodes.BehavioralProfile(category_counts={"Dev": 1})
     candidates = nodes.retrieve_candidates(profile)
     assert candidates[0]["id"] == 1
+
+
+def test_retrieve_candidates_passes_category_and_max_price_through(monkeypatch):
+    received = {}
+
+    def fake_search(vector, top_k=5, category=None, max_price=None):
+        received["category"] = category
+        received["max_price"] = max_price
+        return []
+
+    monkeypatch.setattr(nodes, "embed_texts", lambda texts: [[0.1, 0.2, 0.3]])
+    monkeypatch.setattr(nodes.vector_store, "search", fake_search)
+
+    profile = nodes.BehavioralProfile(category_counts={"Dev": 1})
+    nodes.retrieve_candidates(profile, category="Dev", max_price=500)
+
+    assert received == {"category": "Dev", "max_price": 500}

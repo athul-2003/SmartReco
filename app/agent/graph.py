@@ -37,6 +37,8 @@ REFINED_TOP_K = TOP_K * 3
 class GraphState(TypedDict):
     session: Session
     user: User
+    category: str | None
+    max_price: float | None
     profile: BehavioralProfile
     candidates: list[dict]
     retrieval_attempts: int
@@ -51,7 +53,12 @@ def _analyze(state: GraphState) -> dict:
 def _retrieve(state: GraphState) -> dict:
     attempts = state["retrieval_attempts"] + 1
     top_k = TOP_K if attempts == 1 else REFINED_TOP_K
-    candidates = retrieve_candidates(state["profile"], top_k=top_k)
+    candidates = retrieve_candidates(
+        state["profile"],
+        top_k=top_k,
+        category=state["category"],
+        max_price=state["max_price"],
+    )
     return {"candidates": candidates, "retrieval_attempts": attempts}
 
 
@@ -96,16 +103,24 @@ def _build_graph():
 _compiled_graph = _build_graph()
 
 
-def run_recommendation_graph(session: Session, user: User) -> tuple[str, list[int]]:
+def run_recommendation_graph(
+    session: Session,
+    user: User,
+    category: str | None = None,
+    max_price: float | None = None,
+) -> tuple[str, list[int]]:
     """Runs the full analyze -> retrieve -> evaluate -> refine-if-weak ->
     generate graph. Returns (narrative, product_ids); callers persist as
     needed. Used by the manual refresh button (see prepare_candidates +
     generate_narrative_stream in agent/nodes.py for the streaming
-    first-generation path)."""
+    first-generation path). `category`/`max_price` optionally narrow
+    retrieval to matching products (Phase 6 bonus: metadata filtering)."""
     result = _compiled_graph.invoke(
         {
             "session": session,
             "user": user,
+            "category": category,
+            "max_price": max_price,
             "profile": BehavioralProfile(),
             "candidates": [],
             "retrieval_attempts": 0,

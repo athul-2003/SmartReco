@@ -21,7 +21,7 @@ def test_run_recommendation_graph_returns_grounded_product_ids(
     monkeypatch.setattr(
         graph,
         "retrieve_candidates",
-        lambda profile, top_k=5: [
+        lambda profile, top_k=5, **kw: [
             {"id": 1, "title": "Python 101", "category": "Dev", "score": 0.9},
             {"id": 2, "title": "SQL Basics", "category": "Dev", "score": 0.8},
         ],
@@ -38,7 +38,7 @@ def test_run_recommendation_graph_returns_grounded_product_ids(
 def test_run_recommendation_graph_handles_no_candidates(session: Session, monkeypatch):
     user = _make_user(session)
     monkeypatch.setattr(graph, "build_profile", lambda s, u: graph.BehavioralProfile())
-    monkeypatch.setattr(graph, "retrieve_candidates", lambda profile, top_k=5: [])
+    monkeypatch.setattr(graph, "retrieve_candidates", lambda profile, top_k=5, **kw: [])
 
     narrative, product_ids = graph.run_recommendation_graph(session, user)
     assert product_ids == []
@@ -52,7 +52,7 @@ def test_run_recommendation_graph_refines_weak_retrieval_once(
     # one wider retrieval attempt before generating, not an infinite loop.
     calls: list[int] = []
 
-    def fake_retrieve(profile, top_k=5):
+    def fake_retrieve(profile, top_k=5, **kw):
         calls.append(top_k)
         if len(calls) == 1:
             return [{"id": 1, "title": "Weak match", "category": "Dev", "score": 0.1}]
@@ -70,6 +70,26 @@ def test_run_recommendation_graph_refines_weak_retrieval_once(
     assert product_ids == [2]
 
 
+def test_run_recommendation_graph_passes_category_and_max_price_through(
+    session: Session, monkeypatch
+):
+    received = {}
+
+    def fake_retrieve(profile, top_k=5, category=None, max_price=None):
+        received["category"] = category
+        received["max_price"] = max_price
+        return [{"id": 1, "title": "Python 101", "category": "Dev", "score": 0.9}]
+
+    user = _make_user(session)
+    monkeypatch.setattr(graph, "build_profile", lambda s, u: graph.BehavioralProfile())
+    monkeypatch.setattr(graph, "retrieve_candidates", fake_retrieve)
+    monkeypatch.setattr(graph, "generate_narrative", lambda p, c: "n")
+
+    graph.run_recommendation_graph(session, user, category="Dev", max_price=500)
+
+    assert received == {"category": "Dev", "max_price": 500}
+
+
 def test_run_recommendation_graph_stops_refining_after_max_attempts(
     session: Session, monkeypatch
 ):
@@ -77,7 +97,7 @@ def test_run_recommendation_graph_stops_refining_after_max_attempts(
     # (not loop forever) and still generate from whatever it has.
     calls: list[int] = []
 
-    def always_weak(profile, top_k=5):
+    def always_weak(profile, top_k=5, **kw):
         calls.append(top_k)
         return [{"id": 99, "title": "Still weak", "category": "Dev", "score": 0.05}]
 

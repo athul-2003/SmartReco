@@ -101,12 +101,21 @@ def profile_to_query_text(profile: BehavioralProfile) -> str:
     return ". ".join(parts)
 
 
-def retrieve_candidates(profile: BehavioralProfile, top_k: int = TOP_K) -> list[dict]:
+def retrieve_candidates(
+    profile: BehavioralProfile,
+    top_k: int = TOP_K,
+    category: str | None = None,
+    max_price: float | None = None,
+) -> list[dict]:
     """Embed the profile as a query, retrieve top-K real products from
-    Qdrant (FR-4.2) - never invented, always grounded in the catalog."""
+    Qdrant (FR-4.2) - never invented, always grounded in the catalog.
+    `category`/`max_price` optionally narrow retrieval to matching products
+    (Phase 6 bonus: metadata filtering)."""
     query_text = profile_to_query_text(profile)
     vector = embed_texts([query_text])[0]
-    return vector_store.search(vector, top_k=top_k)
+    return vector_store.search(
+        vector, top_k=top_k, category=category, max_price=max_price
+    )
 
 
 def _narrative_messages(
