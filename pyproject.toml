@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "SmartReco — a behavioral AI recommendation agent, powered by Mesh API"
 requires-python = ">=3.11"
 dependencies = [
+    "apscheduler>=3.11.3",
     "bcrypt<4.1",
     "fastapi>=0.141.1",
     "itsdangerous>=2.2.0",
