@@ -1,3 +1,5 @@
+from urllib.parse import quote
+
 from fastapi import Depends, HTTPException, Request, status
 from passlib.context import CryptContext
 from sqlmodel import Session
@@ -25,11 +27,24 @@ def get_current_user(
     return session.get(User, user_id)
 
 
-def require_login(user: User | None = Depends(get_current_user)) -> User:
+def safe_next_path(next: str | None) -> str:
+    """Only ever redirect to a same-site relative path - a `next` value like
+    `//evil.com` or `https://evil.com` would otherwise make login/register
+    an open redirect. Falls back to `/catalog` (the normal post-login
+    landing page) for anything else, including a missing value."""
+    if next and next.startswith("/") and not next.startswith("//"):
+        return next
+    return "/catalog"
+
+
+def require_login(
+    request: Request, user: User | None = Depends(get_current_user)
+) -> User:
     if user is None:
+        next_param = quote(request.url.path, safe="")
         raise HTTPException(
             status_code=status.HTTP_303_SEE_OTHER,
-            headers={"Location": "/login"},
+            headers={"Location": f"/login?next={next_param}"},
         )
     return user
 

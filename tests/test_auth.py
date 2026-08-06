@@ -2,6 +2,23 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 from app.models.user import Role, User
+from app.services.auth import safe_next_path
+
+
+def test_safe_next_path_allows_relative_paths():
+    assert safe_next_path("/recommendations") == "/recommendations"
+    assert safe_next_path("/catalog/42") == "/catalog/42"
+
+
+def test_safe_next_path_rejects_missing_or_empty():
+    assert safe_next_path(None) == "/catalog"
+    assert safe_next_path("") == "/catalog"
+
+
+def test_safe_next_path_rejects_absolute_and_protocol_relative_urls():
+    assert safe_next_path("https://evil.example.com") == "/catalog"
+    assert safe_next_path("//evil.example.com") == "/catalog"
+    assert safe_next_path("javascript:alert(1)") == "/catalog"
 
 
 def register(
@@ -70,7 +87,7 @@ def test_logout_clears_session(client: TestClient):
 def test_admin_route_redirects_anonymous_to_login(client: TestClient):
     response = client.get("/admin", follow_redirects=False)
     assert response.status_code == 303
-    assert response.headers["location"] == "/login"
+    assert response.headers["location"] == "/login?next=%2Fadmin"
 
 
 def test_admin_route_forbidden_for_regular_user(client: TestClient):
@@ -89,3 +106,103 @@ def test_admin_route_allowed_for_admin_user(client: TestClient, session: Session
     response = client.get("/admin")
     assert response.status_code == 200
     assert "Course Management" in response.text
+
+
+def test_login_redirects_to_next_after_success(client: TestClient):
+    # A user who followed a login-gated link (e.g. a digest email's "View
+    # in Dashboard" button) should land there after signing in, not on the
+    # generic post-login /catalog page.
+    register(client)
+    client.post("/logout", follow_redirects=False)
+
+    response = client.post(
+        "/login",
+        data={
+            "email": "user@example.com",
+            "password": "hunter22",
+            "next": "/recommendations",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/recommendations"
+
+
+def test_login_form_renders_next_as_hidden_field(client: TestClient):
+    response = client.get("/login?next=/recommendations")
+    assert 'name="next" value="/recommendations"' in response.text
+
+
+def test_register_redirects_to_next_after_success(client: TestClient):
+    response = client.post(
+        "/register",
+        data={
+            "email": "newbie@example.com",
+            "password": "hunter22",
+            "next": "/recommendations",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/recommendations"
+
+
+def test_login_rejects_offsite_next_as_open_redirect(client: TestClient):
+    register(client)
+    client.post("/logout", follow_redirects=False)
+
+    response = client.post(
+        "/login",
+        data={
+            "email": "user@example.com",
+            "password": "hunter22",
+            "next": "https://evil.example.com",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/catalog"
+
+
+def test_login_rejects_protocol_relative_next(client: TestClient):
+    register(client)
+    client.post("/logout", follow_redirects=False)
+
+    response = client.post(
+        "/login",
+        data={
+            "email": "user@example.com",
+            "password": "hunter22",
+            "next": "//evil.example.com",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/catalog"
+
+
+def test_full_login_gated_link_flow_lands_on_recommendations(client: TestClient):
+    # End-to-end: anonymous visit to a login-gated link (like the digest
+    # email's dashboard button) -> redirected to login with `next` set ->
+    # after signing in, lands exactly where they were headed.
+    register(client)
+    client.post("/logout", follow_redirects=False)
+
+    gated = client.get("/recommendations", follow_redirects=False)
+    assert gated.status_code == 303
+    login_url = gated.headers["location"]
+    assert login_url == "/login?next=%2Frecommendations"
+
+    login_page = client.get(login_url)
+    assert 'name="next" value="/recommendations"' in login_page.text
+
+    logged_in = client.post(
+        "/login",
+        data={
+            "email": "user@example.com",
+            "password": "hunter22",
+            "next": "/recommendations",
+        },
+        follow_redirects=False,
+    )
+    assert logged_in.headers["location"] == "/recommendations"

@@ -5,15 +5,26 @@ from sqlmodel import Session, select
 
 from app.db import get_session
 from app.models.user import User
-from app.services.auth import get_current_user, hash_password, verify_password
+from app.services.auth import (
+    get_current_user,
+    hash_password,
+    safe_next_path,
+    verify_password,
+)
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 
 
 @router.get("/register", response_class=HTMLResponse)
-def register_form(request: Request, user: User | None = Depends(get_current_user)):
-    return templates.TemplateResponse(request, "register.html", {"user": user})
+def register_form(
+    request: Request,
+    next: str | None = None,
+    user: User | None = Depends(get_current_user),
+):
+    return templates.TemplateResponse(
+        request, "register.html", {"user": user, "next": next}
+    )
 
 
 @router.post("/register")
@@ -21,6 +32,7 @@ def register(
     request: Request,
     email: str = Form(...),
     password: str = Form(...),
+    next: str | None = Form(None),
     session: Session = Depends(get_session),
 ):
     existing = session.exec(select(User).where(User.email == email)).first()
@@ -28,7 +40,11 @@ def register(
         return templates.TemplateResponse(
             request,
             "register.html",
-            {"error": "An account with that email already exists.", "user": None},
+            {
+                "error": "An account with that email already exists.",
+                "user": None,
+                "next": next,
+            },
             status_code=400,
         )
 
@@ -38,12 +54,18 @@ def register(
     session.refresh(user)
 
     request.session["user_id"] = user.id
-    return RedirectResponse(url="/catalog", status_code=303)
+    return RedirectResponse(url=safe_next_path(next), status_code=303)
 
 
 @router.get("/login", response_class=HTMLResponse)
-def login_form(request: Request, user: User | None = Depends(get_current_user)):
-    return templates.TemplateResponse(request, "login.html", {"user": user})
+def login_form(
+    request: Request,
+    next: str | None = None,
+    user: User | None = Depends(get_current_user),
+):
+    return templates.TemplateResponse(
+        request, "login.html", {"user": user, "next": next}
+    )
 
 
 @router.post("/login")
@@ -51,6 +73,7 @@ def login(
     request: Request,
     email: str = Form(...),
     password: str = Form(...),
+    next: str | None = Form(None),
     session: Session = Depends(get_session),
 ):
     user = session.exec(select(User).where(User.email == email)).first()
@@ -58,12 +81,12 @@ def login(
         return templates.TemplateResponse(
             request,
             "login.html",
-            {"error": "Incorrect email or password.", "user": None},
+            {"error": "Incorrect email or password.", "user": None, "next": next},
             status_code=400,
         )
 
     request.session["user_id"] = user.id
-    return RedirectResponse(url="/catalog", status_code=303)
+    return RedirectResponse(url=safe_next_path(next), status_code=303)
 
 
 @router.post("/logout")

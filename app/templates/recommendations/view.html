@@ -3,17 +3,26 @@
 {% block content %}
 <div class="admin-header">
   <div>
+    <span class="section-eyebrow">Personalized for you</span>
     <h1>My Recommendations</h1>
     <p class="recommendation-meta">Generated {{ recommendation.created_at.strftime("%b %d, %Y at %H:%M") }}</p>
   </div>
   <form action="/recommendations/refresh" method="post">
-    <button type="submit" class="btn btn-primary">Refresh Recommendations</button>
+    <button type="submit" class="btn btn-primary">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M18 3v4h-4M6 21v-4h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Refresh Recommendations
+    </button>
   </form>
 </div>
 
 <div class="narrative-card">
-  <span class="chip">Why these courses</span>
-  <p>{{ recommendation.narrative }}</p>
+  <div class="narrative-icon">
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+  </div>
+  <div class="narrative-body">
+    <span class="chip">Why these courses</span>
+    <p>{{ recommendation.narrative }}</p>
+  </div>
 </div>
 
 {% if products %}
@@ -21,7 +30,7 @@
   {% for product in products %}
   {% set cover = product.category|cover %}
   <a href="/catalog/{{ product.id }}" class="product-card" data-product-id="{{ product.id }}">
-    <div class="product-cover {{ cover.tone_class }}">{{ cover.letter }}</div>
+    <div class="product-cover {{ cover.tone_class }}"><span>{{ cover.letter }}</span></div>
     <div class="product-card-body">
       <span class="chip">{{ product.category }}</span>
       <h3>{{ product.title }}</h3>

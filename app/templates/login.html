@@ -2,21 +2,76 @@
 {% block title %}Log in — SmartReco{% endblock %}
 {% block content %}
 <div class="auth-shell">
-  <div class="auth-card">
-    <span class="brand-mark">S</span>
-    <h1>SmartReco</h1>
-    <p class="auth-subtitle">Sign in to browse the catalog and get personalized recommendations.</p>
-    {% if error %}<p class="error">{{ error }}</p>{% endif %}
-    <form action="/login" method="post" class="auth-form">
-      <label>Email Address
-        <input type="email" name="email" placeholder="hello@example.com" required autofocus>
-      </label>
-      <label>Password
-        <input type="password" name="password" required>
-      </label>
-      <button type="submit" class="btn btn-primary">Sign In</button>
-    </form>
-    <p class="auth-footer">Don't have an account? <a href="/register">Register</a></p>
+  <div class="auth-panel">
+    <div class="auth-panel-content">
+      <span class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2 3 7l9 5 9-5-9-5Z" fill="currentColor" opacity="0.9"/><path d="M3 12l9 5 9-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 17l9 5 9-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" opacity="0.55"/></svg>
+      </span>
+      <h2>Welcome back to smarter learning.</h2>
+      <p>Sign in to pick up right where you left off — your behavioral profile keeps refining itself the more you browse.</p>
+      <div class="auth-panel-stats">
+        <div>
+          <span class="auth-panel-stat-icon">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M3 9h18M9 21V9" stroke="currentColor" stroke-width="1.8"/></svg>
+          </span>
+          <strong>1,500+</strong>
+          <span>Courses grounded in real data</span>
+        </div>
+        <div>
+          <span class="auth-panel-stat-icon">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2 3 7l9 5 9-5-9-5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M3 12l9 5 9-5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+          </span>
+          <strong>Zero</strong>
+          <span>Hallucinated picks</span>
+        </div>
+      </div>
+
+      <div class="auth-panel-mockup" aria-hidden="true">
+        <div class="auth-panel-mockup-card back"></div>
+        <div class="auth-panel-mockup-card front">
+          <div class="auth-panel-mockup-row">
+            <div class="auth-panel-mockup-cover">D</div>
+            <div class="auth-panel-mockup-lines">
+              <span style="width: 80%;"></span>
+              <span></span>
+            </div>
+          </div>
+          <span class="auth-panel-mockup-match">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 12.5 9.5 18 20 6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Grounded in your activity
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="auth-form-side">
+    <div class="auth-card">
+      <span class="brand-mark">S</span>
+      <h1>Sign in</h1>
+      <p class="auth-subtitle">Browse the catalog and get personalized recommendations.</p>
+      {% if error %}<p class="error">{{ error }}</p>{% endif %}
+      <form action="/login" method="post" class="auth-form">
+        {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+        <label>Email Address
+          <div class="input-with-icon">
+            <svg class="field-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="m4 7 8 6 8-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <input type="email" name="email" placeholder="hello@example.com" required autofocus>
+          </div>
+        </label>
+        <label>Password
+          <div class="input-with-icon">
+            <svg class="field-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="10" width="16" height="10" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M8 10V7a4 4 0 0 1 8 0v3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            <input type="password" name="password" id="login-password" required>
+            <button type="button" class="password-toggle" data-toggle-for="login-password" aria-label="Show password">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.6"/></svg>
+            </button>
+          </div>
+        </label>
+        <button type="submit" class="btn btn-primary">Sign In</button>
+      </form>
+      <p class="auth-footer">Don't have an account? <a href="/register{% if next %}?next={{ next }}{% endif %}">Register</a></p>
+    </div>
   </div>
 </div>
+<script src="/static/js/password-toggle.js" defer></script>
 {% endblock %}

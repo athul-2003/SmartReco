@@ -12,6 +12,12 @@ class Settings(BaseSettings):
     session_secret: str = "change-me-to-a-random-secret"
     catalog_limit: int = 1500
 
+    # Used to build absolute links in the digest email (dashboard/course
+    # links) - emails are opened outside any browser session tied to the
+    # app's own host, so relative URLs won't work there like they do in
+    # server-rendered pages.
+    public_base_url: str = "http://localhost:8000"
+
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_user: str = ""

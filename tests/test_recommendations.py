@@ -21,7 +21,7 @@ def _register(client: TestClient, email: str = "user@example.com") -> None:
 def test_recommendations_redirects_anonymous_to_login(client: TestClient):
     response = client.get("/recommendations", follow_redirects=False)
     assert response.status_code == 303
-    assert response.headers["location"] == "/login"
+    assert response.headers["location"] == "/login?next=%2Frecommendations"
 
 
 def test_recommendations_shows_empty_state_for_logged_in_user(client: TestClient):
@@ -143,7 +143,7 @@ def test_stream_narrative_requires_login(client: TestClient):
         "/recommendations/stream?candidate_ids=1", follow_redirects=False
     )
     assert response.status_code == 303
-    assert response.headers["location"] == "/login"
+    assert response.headers["location"] == "/login?next=%2Frecommendations%2Fstream"
 
 
 def test_stream_narrative_sends_failed_event_and_no_partial_save_on_error(
@@ -240,7 +240,7 @@ def test_recommendations_empty_state_links_to_catalog_categories(
 def test_refresh_requires_login(client: TestClient):
     response = client.post("/recommendations/refresh", follow_redirects=False)
     assert response.status_code == 303
-    assert response.headers["location"] == "/login"
+    assert response.headers["location"] == "/login?next=%2Frecommendations%2Frefresh"
 
 
 def test_refresh_creates_recommendation_and_shows_grounded_products(

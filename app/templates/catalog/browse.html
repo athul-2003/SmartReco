@@ -7,7 +7,7 @@
     <p>Discover courses across the catalog. Browse a bit — the more you look at, the better your recommendations get.</p>
   </div>
   <div class="hero-art" aria-hidden="true">
-    <span>&#9788;</span>
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="9.5" stroke="currentColor" stroke-width="1.6"/><path d="m15.5 8.5-2.2 5.2-5.2 2.2 2.2-5.2 5.2-2.2Z" fill="currentColor"/></svg>
   </div>
 </div>
 
@@ -77,7 +77,7 @@
       {% for product in products %}
       {% set cover = product.category|cover %}
       <a href="/catalog/{{ product.id }}" class="product-card" data-product-id="{{ product.id }}">
-        <div class="product-cover {{ cover.tone_class }}">{{ cover.letter }}</div>
+        <div class="product-cover {{ cover.tone_class }}"><span>{{ cover.letter }}</span></div>
         <div class="product-card-body">
           <span class="chip">{{ product.category }}</span>
           <h3>{{ product.title }}</h3>

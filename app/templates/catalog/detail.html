@@ -16,7 +16,7 @@
         {% for item in related %}
         {% set cover = item.category|cover %}
         <a href="/catalog/{{ item.id }}" class="product-card" data-product-id="{{ item.id }}">
-          <div class="product-cover {{ cover.tone_class }}">{{ cover.letter }}</div>
+          <div class="product-cover {{ cover.tone_class }}"><span>{{ cover.letter }}</span></div>
           <div class="product-card-body">
             <span class="chip">{{ item.category }}</span>
             <h3>{{ item.title }}</h3>

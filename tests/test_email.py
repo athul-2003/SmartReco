@@ -69,3 +69,42 @@ def test_send_email_authenticates_when_credentials_configured(monkeypatch):
 
     fake_smtp.starttls.assert_called_once()
     fake_smtp.login.assert_called_once_with("me@gmail.com", "app-password")
+
+
+def test_send_email_includes_html_alternative_when_given(monkeypatch):
+    fake_smtp = _fake_smtp()
+    monkeypatch.setattr(smtplib, "SMTP", lambda host, port: fake_smtp)
+    monkeypatch.setattr(
+        email,
+        "get_settings",
+        lambda: Settings(_env_file=None, smtp_host="mailhog", smtp_port=1025),
+    )
+
+    email.send_email(
+        "user@example.com",
+        "Subject",
+        "Plain body",
+        html_body="<html><body><p>Styled body</p></body></html>",
+    )
+
+    sent_message = fake_smtp.send_message.call_args[0][0]
+    assert sent_message.is_multipart()
+    plain_part = sent_message.get_body(("plain",))
+    html_part = sent_message.get_body(("html",))
+    assert "Plain body" in plain_part.get_content()
+    assert "Styled body" in html_part.get_content()
+
+
+def test_send_email_plain_only_when_no_html_body(monkeypatch):
+    fake_smtp = _fake_smtp()
+    monkeypatch.setattr(smtplib, "SMTP", lambda host, port: fake_smtp)
+    monkeypatch.setattr(
+        email,
+        "get_settings",
+        lambda: Settings(_env_file=None, smtp_host="mailhog", smtp_port=1025),
+    )
+
+    email.send_email("user@example.com", "Subject", "Plain body")
+
+    sent_message = fake_smtp.send_message.call_args[0][0]
+    assert sent_message.get_body(("html",)) is None
