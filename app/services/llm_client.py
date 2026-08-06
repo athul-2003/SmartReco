@@ -35,6 +35,11 @@ class LLMClient:
             model=CHAT_MODEL, messages=messages, stream=True
         )
         for chunk in stream:
+            # Some chunks carry no choices at all (e.g. a trailing
+            # usage/metadata chunk) - not every streamed chunk represents a
+            # token delta.
+            if not chunk.choices:
+                continue
             delta = chunk.choices[0].delta.content
             if delta:
                 yield delta

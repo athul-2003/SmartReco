@@ -30,11 +30,24 @@
     source.close();
   });
 
+  function showFailureMessage() {
+    narrativeEl.textContent =
+      "We couldn't generate your recommendations just now - refresh to try again.";
+    narrativeEl.classList.remove("narrative-loading");
+  }
+
+  // Server-sent "failed" event: the request reached Mesh but generation
+  // itself errored out before any text arrived.
+  source.addEventListener("failed", function () {
+    source.close();
+    showFailureMessage();
+  });
+
+  // Built-in EventSource "error": a connection-level failure (network
+  // drop, non-200 response, etc.), distinct from the server-sent "failed"
+  // event above.
   source.onerror = function () {
     source.close();
-    if (!started) {
-      narrativeEl.textContent = "We couldn't generate your recommendations just now - refresh to try again.";
-      narrativeEl.classList.remove("narrative-loading");
-    }
+    if (!started) showFailureMessage();
   };
 })();
