@@ -6,9 +6,11 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import get_settings
 from app.db import init_db
+from app.observability import configure_langsmith
 from app.routers import admin, auth, catalog, events, pages, recommendations
 
 settings = get_settings()
+configure_langsmith(settings)
 
 
 @asynccontextmanager

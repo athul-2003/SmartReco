@@ -7,6 +7,21 @@ from app.db import get_session
 from app.main import app
 
 
+@pytest.fixture(autouse=True)
+def _no_real_langsmith_tracing(monkeypatch):
+    """app.main (imported above) calls configure_langsmith() at import time,
+    which - if a developer's local .env has real LangSmith tracing enabled
+    for manual live verification (see app/observability.py) - would
+    otherwise send every automated test's real LangGraph invocations as
+    live traces. tracing_is_enabled() re-checks these env vars at call
+    time, not just at import, so clearing them per-test reliably prevents
+    it: matches the same "never hit real external services in tests" rule
+    already applied to Mesh/Qdrant/SMTP."""
+    for prefix in ("LANGSMITH", "LANGCHAIN"):
+        monkeypatch.delenv(f"{prefix}_TRACING_V2", raising=False)
+        monkeypatch.delenv(f"{prefix}_TRACING", raising=False)
+
+
 @pytest.fixture(name="session")
 def session_fixture():
     engine = create_engine(
