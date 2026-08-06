@@ -30,6 +30,13 @@ templates.env.filters["cover"] = category_cover
 
 STARTING_POINTS_LIMIT = 3
 
+REFRESH_ERROR_MESSAGES = {
+    "refresh_failed": (
+        "We couldn't refresh your recommendations just now - please try again "
+        "in a moment."
+    ),
+}
+
 
 def _latest_recommendation(session: Session, user: User) -> Recommendation | None:
     return session.exec(
@@ -100,6 +107,7 @@ def _render_generating(
 @router.get("", response_class=HTMLResponse)
 def view_recommendations(
     request: Request,
+    error: str | None = None,
     user: User = Depends(require_login),
     session: Session = Depends(get_session),
 ) -> HTMLResponse:
@@ -134,20 +142,35 @@ def view_recommendations(
         # Enough new activity has landed since the cached recommendation
         # to make regenerating worthwhile (FR "Efficiency" - see
         # agent/triggers.py). Same streaming UX as first-generation.
-        rendered = _render_generating(
-            request, session, user, trigger_reason="threshold"
-        )
+        try:
+            rendered = _render_generating(
+                request, session, user, trigger_reason="threshold"
+            )
+        except Exception:
+            # A Mesh/Qdrant failure here has a safe fallback available
+            # (unlike the first-generation branch above) - the still-valid
+            # cached recommendation below, so degrade to that instead of a
+            # raw 500.
+            logger.exception(
+                "Auto-regeneration retrieval failed for user_id=%s", user.id
+            )
+            rendered = None
         if rendered is not None:
             return rendered
-        # Retrieval came back empty (e.g. an emptied catalog) - fall back
-        # to serving the still-valid cached recommendation below instead
-        # of showing nothing.
+        # Retrieval came back empty (e.g. an emptied catalog) or failed -
+        # fall back to serving the still-valid cached recommendation below
+        # instead of showing nothing.
 
     ordered_products = _ordered_products(session, recommendation.product_ids)
     return templates.TemplateResponse(
         request,
         "recommendations/view.html",
-        {"user": user, "recommendation": recommendation, "products": ordered_products},
+        {
+            "user": user,
+            "recommendation": recommendation,
+            "products": ordered_products,
+            "error": REFRESH_ERROR_MESSAGES.get(error) if error else None,
+        },
     )
 
 
@@ -214,9 +237,20 @@ def refresh_recommendations(
     """`category`/`max_price` are optional, narrowing retrieval to matching
     products (Phase 6 bonus: metadata filtering) - omitted, refresh behaves
     exactly as before."""
-    narrative, product_ids = generate_recommendation(
-        session, user, category=category, max_price=max_price
-    )
+    try:
+        narrative, product_ids = generate_recommendation(
+            session, user, category=category, max_price=max_price
+        )
+    except Exception:
+        # A Mesh/Qdrant failure here shouldn't surface as a raw 500 - the
+        # user already has a valid cached recommendation to fall back to
+        # (this route only reachable from the "Refresh" button on view.html,
+        # which only renders once one exists).
+        logger.exception("Recommendation refresh failed for user_id=%s", user.id)
+        return RedirectResponse(
+            url="/recommendations?error=refresh_failed",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
     _store_recommendation(session, user, narrative, product_ids)
     return RedirectResponse(
         url="/recommendations", status_code=status.HTTP_303_SEE_OTHER

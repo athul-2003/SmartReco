@@ -1,7 +1,9 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from app.services.llm_client import LLMClient
+import pytest
+
+from app.services.llm_client import CHAT_MAX_RETRIES, LLMClient
 
 
 def _chunk(content: str | None = None, has_choices: bool = True):
@@ -31,3 +33,36 @@ def test_chat_stream_skips_chunks_with_no_choices():
 
     result = list(client.chat_stream([{"role": "user", "content": "hi"}]))
     assert result == ["Hello ", "world"]
+
+
+def _chat_completion(content: str):
+    return SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content=content))]
+    )
+
+
+def test_chat_retries_on_transient_failure_then_succeeds(monkeypatch):
+    monkeypatch.setattr("app.services.llm_client.time.sleep", lambda seconds: None)
+    client = LLMClient(api_key="test-key")
+    client._client = MagicMock()
+    client._client.chat.completions.create.side_effect = [
+        RuntimeError("Mesh had a bad day"),
+        _chat_completion("Great fit for you."),
+    ]
+
+    result = client.chat([{"role": "user", "content": "hi"}])
+
+    assert result == "Great fit for you."
+    assert client._client.chat.completions.create.call_count == 2
+
+
+def test_chat_raises_after_exhausting_retries(monkeypatch):
+    monkeypatch.setattr("app.services.llm_client.time.sleep", lambda seconds: None)
+    client = LLMClient(api_key="test-key")
+    client._client = MagicMock()
+    client._client.chat.completions.create.side_effect = RuntimeError("Mesh is down")
+
+    with pytest.raises(RuntimeError, match="Mesh is down"):
+        client.chat([{"role": "user", "content": "hi"}])
+
+    assert client._client.chat.completions.create.call_count == CHAT_MAX_RETRIES
