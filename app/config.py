@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     # server-rendered pages.
     public_base_url: str = "http://localhost:8000"
 
+    # Root logger level (see app/logging_config.py) - "DEBUG" for verbose
+    # local troubleshooting, "WARNING"+ to quiet things down in production.
+    log_level: str = "INFO"
+
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_user: str = ""

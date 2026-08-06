@@ -25,12 +25,14 @@ from fastapi import FastAPI
 
 from app.config import get_settings
 from app.db import init_db
+from app.logging_config import configure_logging
 from app.observability import configure_langsmith
 from app.scheduler import start_scheduler, stop_scheduler
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    configure_logging(get_settings())
     configure_langsmith(get_settings())
     init_db()
     start_scheduler()

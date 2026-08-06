@@ -9,6 +9,11 @@ async def test_lifespan_runs_startup_before_yield_and_shutdown_after(monkeypatch
     calls: list[str] = []
     monkeypatch.setattr(
         lifespan_module,
+        "configure_logging",
+        lambda settings: calls.append("configure_logging"),
+    )
+    monkeypatch.setattr(
+        lifespan_module,
         "configure_langsmith",
         lambda settings: calls.append("configure_langsmith"),
     )
@@ -23,10 +28,16 @@ async def test_lifespan_runs_startup_before_yield_and_shutdown_after(monkeypatch
     app = FastAPI()
     async with lifespan_module.lifespan(app):
         # Startup already ran by the time we're inside the context.
-        assert calls == ["configure_langsmith", "init_db", "start_scheduler"]
+        assert calls == [
+            "configure_logging",
+            "configure_langsmith",
+            "init_db",
+            "start_scheduler",
+        ]
 
     # Shutdown runs on exiting the context.
     assert calls == [
+        "configure_logging",
         "configure_langsmith",
         "init_db",
         "start_scheduler",
