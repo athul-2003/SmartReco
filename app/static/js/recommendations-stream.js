@@ -9,11 +9,15 @@
 
   var scriptEl = document.currentScript;
   var candidateIds = scriptEl.getAttribute("data-candidate-ids") || "";
+  var triggerReason = scriptEl.getAttribute("data-trigger-reason") || "manual";
   var narrativeEl = document.getElementById("narrative-text");
   if (!narrativeEl || !candidateIds) return;
 
   var source = new EventSource(
-    "/recommendations/stream?candidate_ids=" + encodeURIComponent(candidateIds)
+    "/recommendations/stream?candidate_ids=" +
+      encodeURIComponent(candidateIds) +
+      "&reason=" +
+      encodeURIComponent(triggerReason)
   );
   var started = false;
 

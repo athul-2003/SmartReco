@@ -12,6 +12,7 @@ from app.agent.nodes import (
     generate_recommendation,
     prepare_candidates,
 )
+from app.agent.triggers import should_auto_regenerate
 from app.db import get_session
 from app.models.event import Event
 from app.models.product import Product
@@ -52,18 +53,47 @@ def _ordered_products(session: Session, product_ids: list[int]) -> list[Product]
 
 
 def _store_recommendation(
-    session: Session, user: User, narrative: str, product_ids: list[int]
+    session: Session,
+    user: User,
+    narrative: str,
+    product_ids: list[int],
+    trigger_reason: str = "manual",
 ) -> Recommendation:
     recommendation = Recommendation(
         user_id=user.id,
         narrative=narrative,
         product_ids=product_ids,
-        trigger_reason="manual",
+        trigger_reason=trigger_reason,
     )
     session.add(recommendation)
     session.commit()
     session.refresh(recommendation)
     return recommendation
+
+
+def _render_generating(
+    request: Request, session: Session, user: User, trigger_reason: str
+) -> HTMLResponse | None:
+    """Runs retrieval (the fast part) and renders generating.html with real
+    grounded product cards plus a placeholder that streams the narrative in
+    via /stream. Returns None if retrieval found no candidates, so callers
+    can decide how to handle that (differs between first-generation and the
+    auto-regenerate trigger)."""
+    _, candidates = prepare_candidates(session, user)
+    if not candidates:
+        return None
+    candidate_ids = [c["id"] for c in candidates]
+    products = _ordered_products(session, candidate_ids)
+    return templates.TemplateResponse(
+        request,
+        "recommendations/generating.html",
+        {
+            "user": user,
+            "products": products,
+            "candidate_ids": ",".join(str(pid) for pid in candidate_ids),
+            "trigger_reason": trigger_reason,
+        },
+    )
 
 
 @router.get("", response_class=HTMLResponse)
@@ -88,27 +118,29 @@ def view_recommendations(
                 {"user": user, "categories": categories},
             )
 
-        # First visit with real behavior to draw on. Retrieval only (~1-2s,
-        # one Mesh embed call + Qdrant) so we can show real grounded product
-        # cards immediately; the slower narrative streams in separately
-        # rather than blocking this whole page load (see /stream below).
-        _, candidates = prepare_candidates(session, user)
-        if not candidates:
-            recommendation = _store_recommendation(
-                session, user, NO_ACTIVITY_NARRATIVE, []
-            )
-        else:
-            candidate_ids = [c["id"] for c in candidates]
-            products = _ordered_products(session, candidate_ids)
-            return templates.TemplateResponse(
-                request,
-                "recommendations/generating.html",
-                {
-                    "user": user,
-                    "products": products,
-                    "candidate_ids": ",".join(str(pid) for pid in candidate_ids),
-                },
-            )
+        # First visit with real behavior to draw on - always generates,
+        # regardless of the event-count trigger below (there's nothing
+        # cached yet to prefer over).
+        rendered = _render_generating(request, session, user, trigger_reason="manual")
+        if rendered is not None:
+            return rendered
+        # Retrieval found no candidates at all (e.g. empty catalog) - store
+        # the no-activity narrative so this doesn't re-attempt on every
+        # visit.
+        recommendation = _store_recommendation(session, user, NO_ACTIVITY_NARRATIVE, [])
+
+    elif should_auto_regenerate(session, user, recommendation):
+        # Enough new activity has landed since the cached recommendation
+        # to make regenerating worthwhile (FR "Efficiency" - see
+        # agent/triggers.py). Same streaming UX as first-generation.
+        rendered = _render_generating(
+            request, session, user, trigger_reason="threshold"
+        )
+        if rendered is not None:
+            return rendered
+        # Retrieval came back empty (e.g. an emptied catalog) - fall back
+        # to serving the still-valid cached recommendation below instead
+        # of showing nothing.
 
     ordered_products = _ordered_products(session, recommendation.product_ids)
     return templates.TemplateResponse(
@@ -121,6 +153,7 @@ def view_recommendations(
 @router.get("/stream")
 def stream_narrative(
     candidate_ids: str,
+    reason: str = "manual",
     user: User = Depends(require_login),
     session: Session = Depends(get_session),
 ):
@@ -128,7 +161,11 @@ def stream_narrative(
     retrieved and shown by the initial page load (see view_recommendations
     above), then persists the finished Recommendation. Re-derives the
     profile (cheap, no Mesh call) but does not re-embed/re-retrieve - that
-    already happened once, in the request that rendered generating.html."""
+    already happened once, in the request that rendered generating.html.
+    `reason` just carries through the trigger_reason ("manual" for a first
+    generation, "threshold" for the auto-regenerate trigger) for
+    observability - it doesn't change what's generated."""
+    trigger_reason = reason if reason in ("manual", "threshold") else "manual"
     product_ids = [int(pid) for pid in candidate_ids.split(",") if pid]
     products = _ordered_products(session, product_ids)
     candidates = [
@@ -160,7 +197,7 @@ def stream_narrative(
             # leaving the user stuck re-generating from scratch.
 
         narrative = "".join(chunks)
-        _store_recommendation(session, user, narrative, product_ids)
+        _store_recommendation(session, user, narrative, product_ids, trigger_reason)
         yield "event: done\ndata: \n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")

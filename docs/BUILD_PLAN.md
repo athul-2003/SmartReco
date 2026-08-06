@@ -238,13 +238,24 @@ Added a direct regression test for `chat_stream()` reproducing the exact empty-c
 **Goal:** Stop calling the LLM on every action — make regeneration meaningful and efficient (this is explicitly judged: NFR "Efficiency").
 
 **Tasks**
-- [ ] `agent/triggers.py` — hybrid trigger: auto-fires once **N new qualifying events** have accumulated since the last recommendation, OR the user hits manual refresh
-- [ ] Caching: if the trigger hasn't fired, serve the stored `recommendations` row instead of calling Mesh
-- [ ] `trigger_reason` field populated (`threshold` / `manual`) for observability
+- [x] `agent/triggers.py` — hybrid trigger: auto-fires once **N new qualifying events** have accumulated since the last recommendation, OR the user hits manual refresh
+- [x] Caching: if the trigger hasn't fired, serve the stored `recommendations` row instead of calling Mesh
+- [x] `trigger_reason` field populated (`threshold` / `manual`) for observability
 
 **Decision:** **N = 5 new qualifying events** (view/search/click/dwell-over-threshold count equally) triggers auto-regeneration. This is frequent enough to feel responsive in a live demo, infrequent enough to keep Mesh usage bounded and clearly "meaningful," and manual refresh always remains available regardless of count. Tune later if demo behavior warrants it — it's a single constant.
 
-**Definition of done:** generating recommendations repeatedly without new activity costs zero additional Mesh calls (verified via logs/LangSmith); crossing the 5-event threshold auto-regenerates.
+**Implementation notes:**
+- `agent/triggers.py::should_auto_regenerate(session, user, recommendation)` counts `events` rows for that user with `created_at` strictly after the given recommendation's `created_at` (`EVENT_THRESHOLD = 5`). Only events *since* the cached recommendation count — activity that already informed it doesn't count again.
+- **Reused Phase 4's streaming UX for the auto-regenerate path**, rather than building a second code path. `view_recommendations` now branches three ways: no recommendation + no activity → empty state (unchanged); no recommendation + activity → generate (existing first-visit path, `trigger_reason="manual"`); recommendation exists but `should_auto_regenerate` is true → same `generating.html`/`/stream` flow, `trigger_reason="threshold"`. Extracted the shared "run retrieval, render generating.html" logic into `_render_generating()` so both callers share it instead of duplicating.
+- The `trigger_reason` has to survive the round trip from the initial `GET /recommendations` (which decides *why* it's regenerating) to `GET /recommendations/stream` (which is what actually persists the `Recommendation` row, once the narrative finishes) — two separate HTTP requests, the second one issued by the browser's `EventSource`, not the server. Threaded through as a `reason` query param: `generating.html` renders it into `recommendations-stream.js`'s `data-trigger-reason` attribute, and the JS appends `&reason=...` onto the SSE URL it opens.
+- If retrieval comes back empty when the threshold fires (e.g. the catalog emptied out since the cached recommendation was generated), `view_recommendations` falls back to re-serving the still-valid cached recommendation rather than showing nothing or overwriting good data with an empty one.
+- `POST /refresh` (manual button, shown once a recommendation exists) is unaffected — it always regenerates immediately regardless of the threshold, per the SRS's manual-refresh guarantee, and keeps storing `trigger_reason="manual"`.
+
+**Definition of done:** ✅ Verified. 62/62 automated tests pass, including new `tests/test_triggers.py` (threshold math: below/at/above N, only counts events after the recommendation, only counts the given user's events) and new router-level tests in `tests/test_recommendations.py` (cached view served with `prepare_candidates` asserted *not* called below threshold; auto-regenerate renders `generating.html` with `trigger_reason="threshold"` at exactly N events; `/stream`'s `reason` param persists correctly; manual refresh still persists `trigger_reason="manual"`). `ruff check`/`format` clean.
+
+**Live, against the real running stack:** registered a fresh user, sent 2 real tracking events, first `GET /recommendations` correctly rendered the streaming `generating.html` (`trigger_reason="manual"`), streamed and persisted a real Mesh-generated narrative. Immediately re-viewing served the cached page in 158ms with no Mesh/Qdrant call (`prepare_candidates` never invoked, confirmed by response shape — no "Thinking about" placeholder). Sent 5 more real events to cross the threshold — next `GET /recommendations` correctly auto-regenerated (`trigger_reason="threshold"`, ~2.1s retrieval-only, matching the Phase 4 fast-retrieval-then-stream cost), streamed and persisted a second, different narrative. The next view after that dropped back to the 140ms cached path. Queried the container's SQLite DB directly (`docker compose exec app uv run --no-sync python -c ...`) and confirmed both rows persisted with the correct `trigger_reason` values (`manual`, then `threshold`) in order.
+
+**Phase 5 status: ✅ Complete.**
 
 ---
 

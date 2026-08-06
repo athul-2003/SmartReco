@@ -1,6 +1,9 @@
+from datetime import UTC, datetime, timedelta
+
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
+from app.agent.triggers import EVENT_THRESHOLD
 from app.models.event import Event, EventType
 from app.models.product import Product
 from app.models.recommendation import Recommendation
@@ -280,3 +283,119 @@ def test_view_recommendations_skips_ids_no_longer_in_catalog(
 
     view = client.get("/recommendations")
     assert view.status_code == 200
+
+
+def test_refresh_stores_manual_trigger_reason(
+    client: TestClient, session: Session, monkeypatch
+):
+    monkeypatch.setattr(
+        "app.routers.recommendations.generate_recommendation",
+        lambda s, u: ("x", []),
+    )
+    _register(client)
+    client.post("/recommendations/refresh")
+
+    user = session.exec(select(User).where(User.email == "user@example.com")).first()
+    recommendation = session.exec(
+        select(Recommendation).where(Recommendation.user_id == user.id)
+    ).first()
+    assert recommendation.trigger_reason == "manual"
+
+
+def test_view_recommendations_serves_cache_below_event_threshold(
+    client: TestClient, session: Session, monkeypatch
+):
+    # Phase 5: a cached recommendation should keep being served - no Mesh
+    # call - until enough new activity has landed to make regenerating
+    # worthwhile.
+    def _boom(s, u):
+        raise AssertionError("prepare_candidates should not run below threshold")
+
+    monkeypatch.setattr("app.routers.recommendations.prepare_candidates", _boom)
+
+    _register(client, email="cached@example.com")
+    user = session.exec(select(User).where(User.email == "cached@example.com")).first()
+    session.add(
+        Recommendation(
+            user_id=user.id,
+            narrative="Cached narrative.",
+            product_ids=[],
+            created_at=datetime.now(UTC) - timedelta(minutes=5),
+        )
+    )
+    for _ in range(EVENT_THRESHOLD - 1):
+        session.add(Event(user_id=user.id, event_type=EventType.view))
+    session.commit()
+
+    response = client.get("/recommendations")
+    assert response.status_code == 200
+    assert "Cached narrative." in response.text
+
+
+def test_view_recommendations_auto_regenerates_at_event_threshold(
+    client: TestClient, session: Session, monkeypatch
+):
+    product = Product(title="Advanced Python", description="d", category="Dev", price=0)
+    session.add(product)
+    session.commit()
+    session.refresh(product)
+
+    monkeypatch.setattr(
+        "app.routers.recommendations.prepare_candidates",
+        lambda s, u: (
+            object(),
+            [{"id": product.id, "title": product.title, "category": product.category}],
+        ),
+    )
+
+    _register(client, email="threshold@example.com")
+    user = session.exec(
+        select(User).where(User.email == "threshold@example.com")
+    ).first()
+    session.add(
+        Recommendation(
+            user_id=user.id,
+            narrative="Stale narrative.",
+            product_ids=[],
+            created_at=datetime.now(UTC) - timedelta(minutes=5),
+        )
+    )
+    for _ in range(EVENT_THRESHOLD):
+        session.add(Event(user_id=user.id, event_type=EventType.view))
+    session.commit()
+
+    response = client.get("/recommendations")
+    assert response.status_code == 200
+    assert "Advanced Python" in response.text
+    assert 'data-trigger-reason="threshold"' in response.text
+    assert "Stale narrative." not in response.text
+
+
+def test_stream_narrative_persists_threshold_trigger_reason(
+    client: TestClient, session: Session, monkeypatch
+):
+    product = Product(title="Python 101", description="d", category="Dev", price=0)
+    session.add(product)
+    session.commit()
+    session.refresh(product)
+
+    def fake_stream(profile, candidates):
+        yield "Fresh take."
+
+    monkeypatch.setattr(
+        "app.routers.recommendations.generate_narrative_stream", fake_stream
+    )
+    monkeypatch.setattr(
+        "app.routers.recommendations.build_profile", lambda s, u: object()
+    )
+
+    _register(client, email="threshold-stream@example.com")
+    client.get(f"/recommendations/stream?candidate_ids={product.id}&reason=threshold")
+
+    user = session.exec(
+        select(User).where(User.email == "threshold-stream@example.com")
+    ).first()
+    recommendation = session.exec(
+        select(Recommendation).where(Recommendation.user_id == user.id)
+    ).first()
+    assert recommendation.trigger_reason == "threshold"
