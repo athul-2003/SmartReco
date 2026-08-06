@@ -207,26 +207,44 @@ smartreco/
 ## Getting Started
 
 **Prerequisites:**
-- Docker + `make`
+- Docker Desktop (or Docker Engine) installed and **running**, plus `make`
   - **Windows:** `make` isn't installed by default — easiest fix is `winget install ezwinports.make`, or use WSL2/Git Bash, which usually already have it.
 - A valid Mesh API key (prefixed `rsk_`)
 
-**`make` + Docker Compose is the only supported way to run the project** — it keeps the app and Qdrant on identical config (SQLite path, `QDRANT_URL`) with no local/container drift to reason about.
+**`make` + Docker Compose is the only supported way to run the project** — it keeps the app and Qdrant on identical config (SQLite path, `QDRANT_URL`) with no local/container drift to reason about. Don't run `uv run uvicorn ...` or a standalone Qdrant directly.
 
-```bash
-cp .env.example .env       # then fill in MESH_API_KEY
-make up-build               # builds the app image, then starts app + Qdrant (~1-2 min first time)
-make seed                   # seeds ~1,500 products into SQLite + Qdrant (~2-3 min - real Mesh embedding calls)
-make create-admin           # interactively create an admin account (email + password + confirm)
-```
+1. Copy the env template and add your key:
+   ```bash
+   cp .env.example .env
+   ```
+   Open `.env` and set `MESH_API_KEY=rsk_...` to your real key. Every other value already has a working default for local dev — nothing else needs to change to get running.
 
-Anyone can self-register a regular user via `/register` in the UI. There's no admin option there by design — creating an admin only happens via `make create-admin`, so privilege escalation can't happen through the public signup form. The command is idempotent: run it again with an email that's already a regular user and it promotes that account to admin instead of erroring.
+2. Build and start the stack (app + Qdrant + MailHog):
+   ```bash
+   make up-build
+   ```
+   First run builds the app image, ~1-2 min. Wait for it to report both containers healthy (`make ps`, or watch `make logs`).
 
+3. Seed the catalog into SQLite + Qdrant:
+   ```bash
+   make seed
+   ```
+   Takes ~2-3 min — it makes real Mesh embedding calls.
+
+4. Create your admin account:
+   ```bash
+   make create-admin
+   ```
+   Prompts interactively for email/password/confirm.
+
+That's the whole setup. Anyone can also self-register a regular user via `/register` in the UI — there's no admin option there by design, so privilege escalation can't happen through the public signup form; `make create-admin` is the only way to get an admin, and it's idempotent (running it again with an email that's already a regular user promotes that account instead of erroring).
+
+**Once it's running:**
 - App: http://localhost:8000 — register an account, browse/search the catalog at `/catalog`, and (as an admin) manage products at `/admin/products`.
 - Qdrant dashboard: http://localhost:6333/dashboard
 - MailHog (local SMTP catcher for the daily digest bonus — see below): http://localhost:8025
 
-After the first `make up-build`, plain `make up` is enough unless dependencies or the Dockerfile changed. `make down` to stop, `make logs` to tail output, `make ps` for status.
+After the first `make up-build`, plain `make up` is enough unless dependencies or the Dockerfile changed. `make down` to stop, `make logs` to tail output, `make ps` for status. Run `make help` any time for the full command list.
 
 ### Try it out — seeing the agent actually work
 
@@ -264,8 +282,6 @@ make test      # uv run pytest
 make lint      # uv run ruff check app scripts tests
 make fmt       # uv run ruff format app scripts tests
 ```
-
-Run `make help` for the full list of available commands.
 
 Required environment variables include `MESH_API_KEY` (mandatory for every AI call) and `DATABASE_URL` (defaults to a local SQLite file; swap to Postgres for production). Secrets are never committed — `.env` is gitignored.
 
