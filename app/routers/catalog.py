@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, func, select
+from sqlmodel.sql.expression import SelectOfScalar
 
 from app.db import get_session
 from app.models.product import Product
@@ -40,7 +41,7 @@ def _page_numbers(page: int, total_pages: int) -> list[int | None]:
     return result
 
 
-def _filtered_statement(q: str, category: str):
+def _filtered_statement(q: str, category: str) -> SelectOfScalar[Product]:
     statement = select(Product)
     if q:
         like = f"%{q}%"
@@ -61,7 +62,7 @@ def browse(
     page: int = 1,
     user: User | None = Depends(get_current_user),
     session: Session = Depends(get_session),
-):
+) -> HTMLResponse:
     sort = sort if sort in SORT_OPTIONS else "recommended"
     base_statement = _filtered_statement(q, category)
 
@@ -108,10 +109,12 @@ def detail(
     product_id: int,
     user: User | None = Depends(get_current_user),
     session: Session = Depends(get_session),
-):
+) -> HTMLResponse:
     product = session.get(Product, product_id)
     if product is None:
-        raise HTTPException(status_code=404, detail="Product not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Product not found"
+        )
 
     related = session.exec(
         select(Product)

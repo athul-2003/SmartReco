@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
 
@@ -20,7 +20,7 @@ def list_products(
     request: Request,
     user: User = Depends(require_admin),
     session: Session = Depends(get_session),
-):
+) -> HTMLResponse:
     products = session.exec(select(Product).order_by(Product.id.desc())).all()
     return templates.TemplateResponse(
         request, "admin/products_list.html", {"user": user, "products": products}
@@ -28,7 +28,9 @@ def list_products(
 
 
 @router.get("/new", response_class=HTMLResponse)
-def new_product_form(request: Request, user: User = Depends(require_admin)):
+def new_product_form(
+    request: Request, user: User = Depends(require_admin)
+) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "admin/product_form.html",
@@ -45,7 +47,7 @@ def create_product(
     price: float = Form(0.0),
     user: User = Depends(require_admin),
     session: Session = Depends(get_session),
-):
+) -> Response:
     try:
         catalog.create_product(
             session,
@@ -69,15 +71,19 @@ def create_product(
                 "mode": "create",
                 "error": str(exc),
             },
-            status_code=502,
+            status_code=status.HTTP_502_BAD_GATEWAY,
         )
-    return RedirectResponse(url="/admin/products", status_code=303)
+    return RedirectResponse(
+        url="/admin/products", status_code=status.HTTP_303_SEE_OTHER
+    )
 
 
 def _get_product_or_404(session: Session, product_id: int) -> Product:
     product = session.get(Product, product_id)
     if product is None:
-        raise HTTPException(status_code=404, detail="Product not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Product not found"
+        )
     return product
 
 
@@ -87,7 +93,7 @@ def edit_product_form(
     product_id: int,
     user: User = Depends(require_admin),
     session: Session = Depends(get_session),
-):
+) -> HTMLResponse:
     product = _get_product_or_404(session, product_id)
     return templates.TemplateResponse(
         request,
@@ -106,7 +112,7 @@ def update_product(
     price: float = Form(0.0),
     user: User = Depends(require_admin),
     session: Session = Depends(get_session),
-):
+) -> Response:
     product = _get_product_or_404(session, product_id)
     try:
         catalog.update_product(
@@ -133,9 +139,11 @@ def update_product(
                 "mode": "edit",
                 "error": str(exc),
             },
-            status_code=502,
+            status_code=status.HTTP_502_BAD_GATEWAY,
         )
-    return RedirectResponse(url="/admin/products", status_code=303)
+    return RedirectResponse(
+        url="/admin/products", status_code=status.HTTP_303_SEE_OTHER
+    )
 
 
 @router.post("/{product_id}/delete")
@@ -143,12 +151,14 @@ def delete_product(
     product_id: int,
     user: User = Depends(require_admin),
     session: Session = Depends(get_session),
-):
+) -> RedirectResponse:
     product = _get_product_or_404(session, product_id)
     try:
         catalog.delete_product(session, product)
     except catalog.DualWriteError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
+        ) from exc
     return RedirectResponse(
         url="/admin/products", status_code=status.HTTP_303_SEE_OTHER
     )
