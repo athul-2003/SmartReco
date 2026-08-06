@@ -1,10 +1,56 @@
 {% extends "base.html" %}
 {% block title %}SmartReco{% endblock %}
 {% block content %}
-<div class="hero">
-  <h1>Learning, tailored to how you actually browse.</h1>
-  <p>SmartReco watches what you view, search for, and linger on — then uses an agentic RAG recommendation engine to turn that behavior into personalized, persuasive course recommendations grounded in a real catalog, never invented.</p>
-  <a href="/register" class="btn btn-primary">Create an account</a>
-  <a href="/login" class="btn btn-ghost">Log in</a>
+<div class="hero hero-landing">
+  <div class="hero-landing-inner">
+    <span class="section-eyebrow">Agentic RAG recommendations</span>
+    <h1>Learning, tailored to how you actually browse.</h1>
+    <p>SmartReco watches what you view, search for, and linger on — then uses an agentic RAG recommendation engine to turn that behavior into personalized, persuasive course recommendations grounded in a real catalog, never invented.</p>
+    <div class="hero-actions">
+      <a href="/register" class="btn btn-primary">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        Create an account
+      </a>
+      <a href="/login" class="btn btn-ghost">Log in</a>
+    </div>
+    <div class="hero-stats">
+      <div>
+        <strong>1,500+</strong>
+        <span>Real catalog courses</span>
+      </div>
+      <div>
+        <strong>5</strong>
+        <span>Category domains</span>
+      </div>
+      <div>
+        <strong>0</strong>
+        <span>Hallucinated recommendations</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="feature-grid">
+  <div class="feature-card">
+    <div class="feature-icon">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 12h4l2-7 4 14 2-7h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <h3>Behavioral tracking</h3>
+    <p>Views, searches, clicks, and dwell time are captured automatically — no extra effort needed on your part.</p>
+  </div>
+  <div class="feature-card">
+    <div class="feature-icon">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/><path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </div>
+    <h3>Grounded retrieval</h3>
+    <p>Every suggestion is retrieved from a real vector search over the actual catalog — nothing is invented.</p>
+  </div>
+  <div class="feature-card">
+    <div class="feature-icon">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+    </div>
+    <h3>Explains itself</h3>
+    <p>A persuasive, plain-language narrative accompanies every recommendation, so you know exactly why.</p>
+  </div>
 </div>
 {% endblock %}

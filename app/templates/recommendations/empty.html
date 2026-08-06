@@ -2,10 +2,15 @@
 {% block title %}My Recommendations — SmartReco{% endblock %}
 {% block content %}
 <div class="empty-state">
-  <div class="empty-state-icon">✨</div>
+  <div class="empty-state-icon">
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/></svg>
+  </div>
   <h1>Your journey starts here.</h1>
   <p>We don't have enough data to personalize your recommendations just yet. Browse a bit and we'll get to know you, tailoring the experience to your unique learning path.</p>
-  <a href="/catalog" class="btn btn-primary">Browse Course Catalog &rarr;</a>
+  <a href="/catalog" class="btn btn-primary">
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.8"/><rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.8"/><rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.8"/><rect x="14" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.8"/></svg>
+    Browse Course Catalog
+  </a>
 
   {% if categories %}
   <div class="starting-points">

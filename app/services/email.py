@@ -15,7 +15,13 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 
 
-def send_email(to: str, subject: str, body: str) -> None:
+def send_email(to: str, subject: str, body: str, html_body: str | None = None) -> None:
+    """`html_body` is optional - when given, the email is sent as
+    multipart/alternative (plain `body` + styled `html_body`), so clients
+    that render HTML show the styled version while `body` remains the
+    fallback for plain-text clients. Only affects the SMTP send path - the
+    log fallback below always logs the plain body, which is all a log line
+    needs."""
     settings = get_settings()
     if not settings.smtp_host:
         logger.info(
@@ -33,6 +39,8 @@ def send_email(to: str, subject: str, body: str) -> None:
     )
     message["To"] = to
     message.set_content(body)
+    if html_body:
+        message.add_alternative(html_body, subtype="html")
 
     with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as smtp:
         # A local dev catcher like MailHog has no auth/TLS - only do both
