@@ -309,19 +309,25 @@ Added a direct regression test for `chat_stream()` reproducing the exact empty-c
 
 ## Phase 7 — Polish + Submit
 
-**Goal:** Everything the CI screener and human judges need to find, present and correct.
+**Goal:** Everything the CI screener and human judges need to find, present and correct. By this point the CI workflow and repo secrets are already live (done ahead of schedule in an earlier session, alongside `.gitignore`/`.env.example` — see `ACTIVITYLOG.md`), so this phase is almost entirely **documentation and a final verification pass**, not new setup.
 
 **Tasks**
-- [ ] Finalize `README.md` (setup steps verified from a clean clone, bonus features called out, catalog scope stated explicitly per Sec. 9.1 — already drafted, revisit once code exists)
-- [ ] `.env.example` complete and accurate
-- [ ] Confirm `.gitignore` excludes `.env`, `.venv`, `*.db`, `__pycache__`
-- [ ] Download the mandated CI workflow **only** from the official hackathon dashboard → `.github/workflows/smartreco-checks.yml`
-- [ ] Set GitHub repo secrets: `MESH_API_KEY`, `SUBMISSION_TOKEN`
-- [ ] `requirements.txt` (exported from `uv`) lists `fastapi` + `openai` explicitly, for the automated screener
-- [ ] Sanity pass: fresh clone → `uv sync` → seed → run, following only the README
+- [x] CI workflow (`.github/workflows/smartreco-checks.yml`, downloaded from the official hackathon dashboard) and repo secrets (`MESH_API_KEY`, `SUBMISSION_TOKEN`) — done in an earlier session (see the 2026-08-05 "CI enabled" entry in `ACTIVITYLOG.md`). Re-confirmed still green on every PR through Phase 6.
+- [x] Finalize `README.md` — status banner, Data Model, and Project Structure sections had all drifted badly out of date (still described "Phases 1-2 complete" and a structure that predated Phases 3-6 and the whole UI/digest-email pass). Rewrote against the actual current file tree and fixed the `events.metadata` → `events.event_metadata` naming, the Build Plan phase table (all ✅ now), and the `requirements.txt` mention in "Submission & CI Compliance" (see Decision below).
+- [x] `.env.example` complete and accurate against every setting `app/config.py` actually reads — diffed field-by-field, already 1:1, no changes needed.
+- [x] Confirm `.gitignore` excludes `.env`, `.venv`, `*.db`, `__pycache__` — confirmed (plus `.env.*` for extra safety, with `.env.example` explicitly un-ignored).
+- [x] Final codebase review pass via the installed FastAPI/SQLModel Library Skills (`AGENTS.md`) — refreshed against the pinned versions (`uvx library-skills --claude --all --yes --copy` reported "No changes needed", confirming the installed skill content already matches `uv.lock`). Loaded both skills and reviewed `app/routers/`/`app/main.py` and `app/models/`:
+  - **SQLModel side: no findings.** Already idiomatic throughout — `session.exec(select(...))`/`session.get()` everywhere (zero raw `.execute()`/`.query()`/`.scalars()`), all models import from `sqlmodel` not raw SQLAlchemy declarative, the one JSON API (`events.py`) already follows the split-model pattern (`EventIn`/`EventBatchIn`, not the table model directly), router-level prefixes declared on `APIRouter()` itself rather than in `include_router()`, sync `def` path operations throughout (matches the Phase 1 sync-everywhere decision — the skill's own default when I/O may block).
+  - **FastAPI side: one real, safe finding, fixed.** `Form(...)` used for required form fields in `admin.py`/`auth.py` (10 occurrences) — the skill explicitly says not to use `...` as a default for required parameters, since bare `Form()` already means required. Mechanical, zero-behavior-change fix; 108/108 tests still pass, `ruff` clean.
+  - **Noted, not changed:** the codebase uses the classic `param: Type = Depends(...)` dependency style throughout rather than the skill's now-preferred `Annotated[Type, Depends(...)]`. Both are fully supported by FastAPI with identical behavior - this is purely idiomatic, and converting every route across every router file this close to submission is a large-blast-radius change for zero functional benefit, so left as-is rather than risking a regression for a style preference.
+- [x] Sanity pass: fresh clone → `uv sync` → seed → run, following only the README. Did a genuine `git clone` from GitHub into a scratch directory (not just the local working copy) - `uv sync` clean, 108/108 tests pass, `make up-build` + `make seed` (real 1,500/1,500 Mesh+Qdrant seed) + a full manual walkthrough (register → browse → auto-generate recommendation → stream → persist) all worked cold, no local-only assumptions baked in anywhere. Also used this clone to verify the digest job's **log-fallback path** (unset `SMTP_HOST`, the state any reviewer's clone starts in) end-to-end, not just the MailHog path already covered in Phase 6 - confirmed the real rendered email logs correctly instead of crashing. Found and fixed one real, unrelated issue while cleaning up afterward: a `docker compose down -f docker-compose.yml` (excluding the override file) left a stray MailHog container bound to the host ports, which then made the *real* dev stack's freshly-recreated MailHog silently come up without its own port bindings - force-recreating it fixed it. Not a code bug, but a good reminder that `-f docker-compose.yml`-only commands (the `prod-*` Makefile targets) don't know about anything the override file defines.
 - [ ] Optional: deploy (Qdrant Cloud free tier + Postgres) and record a short demo video
 
-**Definition of done:** a reviewer can clone the repo cold and have it running locally following only the README; CI checks (critical + advisory) pass.
+**Decision:** **no standalone `requirements.txt`.** The hackathon's actual repo requirement is "`requirements.txt` (or `pyproject.toml` / `Pipfile`) listing a web framework and the LLM client used through Mesh" — `pyproject.toml` already lists both explicitly (`fastapi`, `openai`), and the CI screener's own `requirements` check has read `pyproject.toml` directly and passed on every run since Phase 0. A parallel `requirements.txt` would just be a second, driftable source of truth for the same two facts — dropped from the earlier draft of this task list as redundant, not an oversight.
+
+**Definition of done:** ✅ Met. A reviewer can clone the repo cold and have it running locally following only the README (live-verified via a real fresh clone, not assumed); CI checks (critical + advisory) pass on every PR (only the known, non-code hackathon-dashboard-submission 403 outstanding); the Library Skills review pass ran with one finding, fixed.
+
+**Phase 7 status: ✅ Complete** (mandatory scope - the optional deploy + demo video is still open, at your discretion).
 
 ---
 

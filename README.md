@@ -2,7 +2,7 @@
 
 **A Behavioral AI Recommendation Agent** — built for the *SmartReco Build Challenge 2026*, powered by **Mesh API**.
 
-> **Status:** 🚧 In development — Phases 1–2 complete: auth, roles, and a seeded, browsable catalog with admin CRUD dual-written to SQL + Qdrant. Behavioral tracking and the recommendation agent land in later phases per the [Build Plan](#build-plan).
+> **Status:** ✅ All 7 phases complete, including every committed bonus (LangGraph, APScheduler daily digest, LangSmith tracing, Qdrant metadata filtering). See the [Build Plan](#build-plan) for the phase-by-phase breakdown.
 
 ---
 
@@ -124,7 +124,7 @@ All Mesh calls are wrapped in a single internal `LLMClient` — agent logic neve
 
 - **users** — `id`, `email` (unique), `password_hash` (bcrypt), `role` (`user`/`admin`), `created_at`
 - **products** — `id` (also the Qdrant point ID), `title`, `description`, `category`, `price`, `created_at`/`updated_at`
-- **events** — `id`, `user_id` FK, `event_type` (`view`/`search`/`click`/`dwell`), `product_id` FK (nullable), `metadata` (JSON), `created_at`
+- **events** — `id`, `user_id` FK, `event_type` (`view`/`search`/`click`/`dwell`), `product_id` FK (nullable), `event_metadata` (JSON — named `event_metadata` rather than `metadata`, which is a reserved attribute on SQLAlchemy declarative models), `created_at`
 - **recommendations** — `id`, `user_id` FK, `narrative`, `product_ids` (JSON, ordered), `trigger_reason` (`threshold`/`manual`), `created_at`
 
 **Vector store (Qdrant):** collection `products`, one point per catalog item, point ID = relational `product.id`, vector = embedding of title + description, payload = `title`/`category`/`price` for metadata-filtered retrieval.
@@ -151,33 +151,56 @@ The source data has no `description` field (title, price, rating, review/subscri
 
 Seeding (`scripts/seed_catalog.py`) batches embeddings (~100 inputs per Mesh call — 1,500 products seeds in 15 Mesh calls), is resumable/idempotent (skips titles already in the database), and uses light retry/backoff on rate limits.
 
-## Planned Project Structure
+## Project Structure
 
 ```
 smartreco/
   app/
-    main.py                # FastAPI app factory, routers, startup
-    config.py               # pydantic-settings; reads .env
-    db.py                    # SQLModel engine/session (SQLAlchemy under the hood)
-    models/                  # SQLModel tables: user, product, event, recommendation
-    schemas/                 # SQLModel/Pydantic request/response models
-    routers/                 # auth, catalog, admin, events, recommendations
+    main.py                    # FastAPI app factory, lifespan (init_db, scheduler), routers
+    config.py                  # pydantic-settings; reads .env
+    db.py                      # SQLModel engine/session (SQLAlchemy under the hood)
+    scheduler.py                # APScheduler daily digest job (BackgroundScheduler)
+    observability.py            # LangSmith tracing env-var wiring for the LangGraph pipeline
+    models/                     # SQLModel tables
+      user.py                     # users (email, password_hash, role)
+      product.py                  # products (catalog items, also the Qdrant point ID)
+      event.py                    # events (behavioral tracking)
+      recommendation.py           # recommendations (narrative, product_ids, trigger_reason)
+    routers/                    # request handling — auth, catalog, admin, events, pages, recommendations
     services/
-      llm_client.py          # thin Mesh wrapper (openai SDK)
-      vector_store.py        # Qdrant client + dual-write sync
-      embeddings.py           # Mesh embeddings helper
-      tracking.py             # event validation + storage
+      auth.py                     # password hashing, session dependencies, safe_next_path
+      catalog.py                   # dual-write orchestration (SQL + Qdrant, rollback on failure)
+      llm_client.py                 # thin Mesh wrapper (openai SDK) — the only place that calls Mesh
+      embeddings.py                  # batched Mesh embeddings helper, retry/backoff
+      vector_store.py                 # Qdrant client, collection setup, top-K + metadata-filtered search
+      email.py                         # SMTP send (or log-fallback if unconfigured)
+      digest.py                         # daily digest job logic — runs the graph per active user, emails it
+      ui.py                              # deterministic tonal product-cover generator (no product images)
     agent/
-      graph.py                # LangGraph workflow definition
-      nodes.py                 # analyze / retrieve / evaluate / refine / generate
-      triggers.py               # event-threshold + manual refresh logic
-    scheduler.py              # APScheduler daily digest job
-    templates/                 # Jinja2 pages
-    static/js/tracker.js       # non-blocking behavioral tracker
+      graph.py                  # LangGraph workflow: analyze -> retrieve -> evaluate -> refine -> generate
+      nodes.py                   # the same pipeline's building blocks + the streaming first-generation path
+      triggers.py                 # event-threshold auto-regeneration logic
+    templates/                  # Jinja2 pages (auth, catalog, admin, recommendations)
+    static/
+      css/style.css                # the whole design system (tokens, components, light/dark)
+      js/tracker.js                 # non-blocking, batched/throttled behavioral tracker
+      js/recommendations-stream.js   # SSE client for the streaming narrative
+      js/password-toggle.js           # login/register password show/hide toggle
   scripts/
-    seed_catalog.py            # load dataset -> DB + Qdrant
+    mesh_spike.py               # Phase 0 connectivity check (throwaway)
+    seed_catalog.py              # load scripts/data/courses.csv -> SQLite + Qdrant
+    create_admin.py               # interactive admin bootstrap (make create-admin)
+    data/courses.csv               # committed, CC0-1.0 seed dataset
+  tests/                       # pytest, mocks Mesh/Qdrant, isolated in-memory DB
+  docs/
+    SmartReco_SRS.docx          # source of truth for requirements
+    BUILD_PLAN.md                 # mandatory phase-by-phase execution plan
+    DESIGN.md                      # design system tokens (colors, type, spacing)
   .github/workflows/smartreco-checks.yml
-  requirements.txt / pyproject.toml (uv)
+  docker-compose.yml / docker-compose.override.yml   # app + Qdrant + MailHog (dev)
+  Dockerfile / docker-entrypoint.sh
+  Makefile
+  pyproject.toml / uv.lock
   .env.example
   .gitignore
   README.md
@@ -231,16 +254,16 @@ Required environment variables include `MESH_API_KEY` (mandatory for every AI ca
 
 Sequenced to de-risk the make-or-break item (Mesh) first, then the grounded pipeline, then bonuses. Each phase is independently runnable and does not depend on any later phase, so they execute strictly in order.
 
-| Phase | Deliverable |
-|---|---|
-| 0 — Mesh spike | Minimal script: one embedding + one chat call through Mesh. |
-| 1 — Foundation | FastAPI app (uv), SQLModel models, auth + roles, Jinja2 shell. |
-| 2 — Catalog + dual-write | Admin CRUD; seed script; products dual-written to SQLite + Qdrant. |
-| 3 — Tracking | Vanilla-JS batched/throttled tracker; non-blocking ingestion. |
-| 4 — Agent (core) | Profile → Mesh embed → Qdrant retrieve → Mesh generate → store → display. |
-| 5 — Triggers + cache | Hybrid event-threshold + manual refresh; caching to avoid redundant LLM calls. |
-| 6 — Bonuses | LangGraph agent graph; APScheduler daily digest; LangSmith tracing; metadata filtering. |
-| 7 — Polish + submit | README, `.env.example`, CI workflow + secrets, cleanup; optional deploy + demo video. |
+| Phase | Deliverable | Status |
+|---|---|---|
+| 0 — Mesh spike | Minimal script: one embedding + one chat call through Mesh. | ✅ |
+| 1 — Foundation | FastAPI app (uv), SQLModel models, auth + roles, Jinja2 shell. | ✅ |
+| 2 — Catalog + dual-write | Admin CRUD; seed script; products dual-written to SQLite + Qdrant. | ✅ |
+| 3 — Tracking | Vanilla-JS batched/throttled tracker; non-blocking ingestion. | ✅ |
+| 4 — Agent (core) | Profile → Mesh embed → Qdrant retrieve → Mesh generate → store → display. | ✅ |
+| 5 — Triggers + cache | Hybrid event-threshold + manual refresh; caching to avoid redundant LLM calls. | ✅ |
+| 6 — Bonuses | LangGraph agent graph; APScheduler daily digest; LangSmith tracing; metadata filtering. | ✅ |
+| 7 — Polish + submit | README, `.env.example`, CI workflow + secrets, final codebase review; optional deploy + demo video. | ✅ |
 
 See [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md) for the full phase-by-phase breakdown — concrete tasks, decisions made on the SRS's open questions (event-trigger threshold, email digest provider, dataset/catalog-limit choice, session strategy), and a definition-of-done for each phase.
 
@@ -248,7 +271,7 @@ See [`docs/BUILD_PLAN.md`](docs/BUILD_PLAN.md) for the full phase-by-phase break
 
 This is a hackathon submission judged automatically and by human reviewers. Required at submission time:
 
-- All source code, plus `requirements.txt`/`pyproject.toml` listing `fastapi` and `openai`.
+- All source code, plus `pyproject.toml` listing `fastapi` (web framework) and `openai` (the LLM client used through Mesh) — no separate `requirements.txt`, since `pyproject.toml` already satisfies the "requirements.txt *or* pyproject.toml/Pipfile" requirement and the CI screener reads it directly.
 - `.gitignore` that excludes `.env` — no secrets ever committed.
 - GitHub repository secrets: `MESH_API_KEY` and `SUBMISSION_TOKEN`.
 - The mandated CI workflow file (`.github/workflows/smartreco-checks.yml`), downloaded **only** from the official hackathon dashboard — not from any third-party source.

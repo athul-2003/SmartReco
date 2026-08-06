@@ -30,8 +30,8 @@ def register_form(
 @router.post("/register")
 def register(
     request: Request,
-    email: str = Form(...),
-    password: str = Form(...),
+    email: str = Form(),
+    password: str = Form(),
     next: str | None = Form(None),
     session: Session = Depends(get_session),
 ):
@@ -71,8 +71,8 @@ def login_form(
 @router.post("/login")
 def login(
     request: Request,
-    email: str = Form(...),
-    password: str = Form(...),
+    email: str = Form(),
+    password: str = Form(),
     next: str | None = Form(None),
     session: Session = Depends(get_session),
 ):
