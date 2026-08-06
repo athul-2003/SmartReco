@@ -8,6 +8,7 @@ from app.config import get_settings
 from app.db import init_db
 from app.observability import configure_langsmith
 from app.routers import admin, auth, catalog, events, pages, recommendations
+from app.scheduler import start_scheduler, stop_scheduler
 
 settings = get_settings()
 configure_langsmith(settings)
@@ -16,7 +17,9 @@ configure_langsmith(settings)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    start_scheduler()
     yield
+    stop_scheduler()
 
 
 app = FastAPI(title="SmartReco", lifespan=lifespan)

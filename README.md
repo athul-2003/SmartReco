@@ -202,8 +202,13 @@ Anyone can self-register a regular user via `/register` in the UI. There's no ad
 
 - App: http://localhost:8000 — register an account, browse/search the catalog at `/catalog`, and (as an admin) manage products at `/admin/products`.
 - Qdrant dashboard: http://localhost:6333/dashboard
+- MailHog (local SMTP catcher for the daily digest bonus — see below): http://localhost:8025
 
 After the first `make up-build`, plain `make up` is enough unless dependencies or the Dockerfile changed. `make down` to stop, `make logs` to tail output, `make ps` for status.
+
+**Bonus features (all optional, all off by default):**
+- **Daily email digest** (APScheduler + SMTP): with no `.env` setup, the scheduled job logs the rendered digest instead of sending. To see a real email locally, set `SMTP_HOST=mailhog` and `SMTP_PORT=1025` in `.env` (`SMTP_USER`/`SMTP_PASSWORD` stay blank — MailHog needs no auth) — `make up`/`make up-build` already starts a MailHog container for this, and delivered mail shows up at http://localhost:8025. For a real relay (e.g. Gmail), set `SMTP_HOST` to it and fill in `SMTP_USER`/`SMTP_PASSWORD`.
+- **LangSmith tracing**: set `LANGCHAIN_TRACING_V2=true` and `LANGCHAIN_API_KEY` in `.env` to trace every LangGraph run (the manual "Refresh Recommendations" pipeline) to your LangSmith dashboard. `LANGCHAIN_PROJECT` optionally targets a specific project (defaults to `smartreco`).
 
 **Hot reload:** `make up`/`make up-build` auto-merge `docker-compose.override.yml`, which bind-mounts `app/` and `scripts/` into the container and runs uvicorn with `--reload` — edit a router, template, or `static/css` file on the host and the running app picks it up immediately, no rebuild needed. This override is dev-only; it's never used in production.
 

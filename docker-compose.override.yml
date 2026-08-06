@@ -17,3 +17,21 @@ services:
         "--host", "0.0.0.0", "--port", "8000",
         "--reload", "--reload-dir", "/app/app",
       ]
+
+  # Local-only SMTP catcher for testing the digest job's real "sent" path
+  # without real credentials or spamming a real inbox (see docs/BUILD_PLAN.md,
+  # Phase 6's email-delivery decision). Not part of docker-compose.yml itself
+  # since it has no place in a production deploy - excluded automatically
+  # whenever `make prod-*` runs with `-f docker-compose.yml` only.
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    restart: unless-stopped
+    ports:
+      - "8025:8025" # web UI - view caught emails at http://localhost:8025
+      - "1025:1025" # SMTP
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8025/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
