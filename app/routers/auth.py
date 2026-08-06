@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import APIRouter, Depends, Form, Request, status
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
 
@@ -21,7 +21,7 @@ def register_form(
     request: Request,
     next: str | None = None,
     user: User | None = Depends(get_current_user),
-):
+) -> HTMLResponse:
     return templates.TemplateResponse(
         request, "register.html", {"user": user, "next": next}
     )
@@ -34,7 +34,7 @@ def register(
     password: str = Form(),
     next: str | None = Form(None),
     session: Session = Depends(get_session),
-):
+) -> Response:
     existing = session.exec(select(User).where(User.email == email)).first()
     if existing is not None:
         return templates.TemplateResponse(
@@ -45,7 +45,7 @@ def register(
                 "user": None,
                 "next": next,
             },
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
         )
 
     user = User(email=email, password_hash=hash_password(password))
@@ -54,7 +54,9 @@ def register(
     session.refresh(user)
 
     request.session["user_id"] = user.id
-    return RedirectResponse(url=safe_next_path(next), status_code=303)
+    return RedirectResponse(
+        url=safe_next_path(next), status_code=status.HTTP_303_SEE_OTHER
+    )
 
 
 @router.get("/login", response_class=HTMLResponse)
@@ -62,7 +64,7 @@ def login_form(
     request: Request,
     next: str | None = None,
     user: User | None = Depends(get_current_user),
-):
+) -> HTMLResponse:
     return templates.TemplateResponse(
         request, "login.html", {"user": user, "next": next}
     )
@@ -75,21 +77,23 @@ def login(
     password: str = Form(),
     next: str | None = Form(None),
     session: Session = Depends(get_session),
-):
+) -> Response:
     user = session.exec(select(User).where(User.email == email)).first()
     if user is None or not verify_password(password, user.password_hash):
         return templates.TemplateResponse(
             request,
             "login.html",
             {"error": "Incorrect email or password.", "user": None, "next": next},
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
         )
 
     request.session["user_id"] = user.id
-    return RedirectResponse(url=safe_next_path(next), status_code=303)
+    return RedirectResponse(
+        url=safe_next_path(next), status_code=status.HTTP_303_SEE_OTHER
+    )
 
 
 @router.post("/logout")
-def logout(request: Request):
+def logout(request: Request) -> RedirectResponse:
     request.session.clear()
-    return RedirectResponse(url="/", status_code=303)
+    return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)

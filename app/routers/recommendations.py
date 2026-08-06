@@ -1,6 +1,7 @@
 import logging
+from collections.abc import Iterator
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
@@ -101,7 +102,7 @@ def view_recommendations(
     request: Request,
     user: User = Depends(require_login),
     session: Session = Depends(get_session),
-):
+) -> HTMLResponse:
     recommendation = _latest_recommendation(session, user)
 
     if recommendation is None:
@@ -156,7 +157,7 @@ def stream_narrative(
     reason: str = "manual",
     user: User = Depends(require_login),
     session: Session = Depends(get_session),
-):
+) -> StreamingResponse:
     """Server-Sent Events: streams the narrative for the product IDs already
     retrieved and shown by the initial page load (see view_recommendations
     above), then persists the finished Recommendation. Re-derives the
@@ -172,7 +173,7 @@ def stream_narrative(
         {"id": p.id, "title": p.title, "category": p.category} for p in products
     ]
 
-    def event_stream():
+    def event_stream() -> Iterator[str]:
         if not candidates:
             yield "event: done\ndata: \n\n"
             return
@@ -209,7 +210,7 @@ def refresh_recommendations(
     max_price: float | None = None,
     user: User = Depends(require_login),
     session: Session = Depends(get_session),
-):
+) -> RedirectResponse:
     """`category`/`max_price` are optional, narrowing retrieval to matching
     products (Phase 6 bonus: metadata filtering) - omitted, refresh behaves
     exactly as before."""
@@ -217,4 +218,6 @@ def refresh_recommendations(
         session, user, category=category, max_price=max_price
     )
     _store_recommendation(session, user, narrative, product_ids)
-    return RedirectResponse(url="/recommendations", status_code=303)
+    return RedirectResponse(
+        url="/recommendations", status_code=status.HTTP_303_SEE_OTHER
+    )

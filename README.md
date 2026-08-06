@@ -2,8 +2,6 @@
 
 **A Behavioral AI Recommendation Agent** — built for the *SmartReco Build Challenge 2026*, powered by **Mesh API**.
 
-> **Status:** ✅ All 7 phases complete, including every committed bonus (LangGraph, APScheduler daily digest, LangSmith tracing, Qdrant metadata filtering). See the [Build Plan](#build-plan) for the phase-by-phase breakdown.
-
 ---
 
 ## What is SmartReco?
@@ -210,14 +208,15 @@ smartreco/
 
 **Prerequisites:**
 - Docker + `make`
+  - **Windows:** `make` isn't installed by default — easiest fix is `winget install ezwinports.make`, or use WSL2/Git Bash, which usually already have it.
 - A valid Mesh API key (prefixed `rsk_`)
 
 **`make` + Docker Compose is the only supported way to run the project** — it keeps the app and Qdrant on identical config (SQLite path, `QDRANT_URL`) with no local/container drift to reason about.
 
 ```bash
 cp .env.example .env       # then fill in MESH_API_KEY
-make up-build               # builds the app image, then starts app + Qdrant
-make seed                   # seeds ~1,500 products into SQLite + Qdrant (run once the stack is up)
+make up-build               # builds the app image, then starts app + Qdrant (~1-2 min first time)
+make seed                   # seeds ~1,500 products into SQLite + Qdrant (~2-3 min - real Mesh embedding calls)
 make create-admin           # interactively create an admin account (email + password + confirm)
 ```
 
@@ -228,6 +227,26 @@ Anyone can self-register a regular user via `/register` in the UI. There's no ad
 - MailHog (local SMTP catcher for the daily digest bonus — see below): http://localhost:8025
 
 After the first `make up-build`, plain `make up` is enough unless dependencies or the Dockerfile changed. `make down` to stop, `make logs` to tail output, `make ps` for status.
+
+### Try it out — seeing the agent actually work
+
+Once the stack is up and seeded, this is the fastest path to watching the full behavioral → RAG → generation pipeline run end to end, in the UI:
+
+1. Register a new account at `/register` and you'll land on `/catalog`.
+2. Browse a few courses — open 2-3 product detail pages, try a search. Each of these is a real tracked event (view/search/click/dwell), sent by `static/js/tracker.js` in the background.
+3. Click **My Recommendations** in the nav. On this first visit, the page shows real, grounded product cards immediately (Qdrant retrieval, ~1-2s) while the persuasive narrative streams in live underneath (Mesh chat completion via Server-Sent Events).
+4. Revisit the page — it now loads instantly from the cached recommendation, with zero additional Mesh/Qdrant calls, until either you click **Refresh Recommendations** or 5 more tracked events accumulate (see FR-5).
+5. *(Bonus, optional)* To see the scheduled email digest without waiting for its daily trigger, set `SMTP_HOST=mailhog`/`SMTP_PORT=1025` in `.env` (see below), then manually invoke the job the same pipeline uses for testing:
+   ```bash
+   docker compose exec app uv run --no-sync python -c "
+   from app.db import engine
+   from sqlmodel import Session
+   from app.services.digest import run_daily_digest
+   with Session(engine) as session:
+       print('digests sent:', run_daily_digest(session))
+   "
+   ```
+   Then open http://localhost:8025 — the digest email (HTML + plain-text) will be there, with clickable links back into the app.
 
 **Bonus features (all optional, all off by default):**
 - **Daily email digest** (APScheduler + SMTP): with no `.env` setup, the scheduled job logs the rendered digest instead of sending. To see a real email locally, set `SMTP_HOST=mailhog` and `SMTP_PORT=1025` in `.env` (`SMTP_USER`/`SMTP_PASSWORD` stay blank — MailHog needs no auth) — `make up`/`make up-build` already starts a MailHog container for this, and delivered mail shows up at http://localhost:8025. For a real relay (e.g. Gmail), set `SMTP_HOST` to it and fill in `SMTP_USER`/`SMTP_PASSWORD`.
