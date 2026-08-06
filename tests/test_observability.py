@@ -10,7 +10,7 @@ def _settings(**overrides) -> Settings:
 
 def _clear_env(monkeypatch):
     for prefix in ("LANGSMITH", "LANGCHAIN"):
-        for suffix in ("TRACING_V2", "API_KEY", "PROJECT"):
+        for suffix in ("TRACING_V2", "TRACING", "API_KEY", "PROJECT"):
             monkeypatch.delenv(f"{prefix}_{suffix}", raising=False)
 
 
@@ -46,6 +46,7 @@ def test_configure_langsmith_sets_both_namespaces_when_fully_configured(monkeypa
 
     for prefix in ("LANGSMITH", "LANGCHAIN"):
         assert os.environ[f"{prefix}_TRACING_V2"] == "true"
+        assert os.environ[f"{prefix}_TRACING"] == "true"
         assert os.environ[f"{prefix}_API_KEY"] == "lsv2_x"
         assert os.environ[f"{prefix}_PROJECT"] == "my-project"
 
