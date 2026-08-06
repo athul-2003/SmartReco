@@ -143,6 +143,83 @@ def test_stream_narrative_requires_login(client: TestClient):
     assert response.headers["location"] == "/login"
 
 
+def test_stream_narrative_sends_failed_event_and_no_partial_save_on_error(
+    client: TestClient, session: Session, monkeypatch
+):
+    # If generation errors out before any text arrives, the stream should
+    # degrade gracefully (a "failed" event, not a crashed connection) and
+    # must not persist an empty/broken recommendation.
+    product = Product(
+        title="Python 101", description="Learn Python.", category="Dev", price=0
+    )
+    session.add(product)
+    session.commit()
+    session.refresh(product)
+
+    def broken_stream(profile, candidates):
+        raise RuntimeError("Mesh had a bad day")
+        yield  # pragma: no cover - makes this a generator function
+
+    monkeypatch.setattr(
+        "app.routers.recommendations.generate_narrative_stream", broken_stream
+    )
+    monkeypatch.setattr(
+        "app.routers.recommendations.build_profile", lambda s, u: object()
+    )
+
+    _register(client, email="broken-stream@example.com")
+    response = client.get(f"/recommendations/stream?candidate_ids={product.id}")
+    assert response.status_code == 200
+    assert "event: failed" in response.text
+
+    user = session.exec(
+        select(User).where(User.email == "broken-stream@example.com")
+    ).first()
+    recommendation = session.exec(
+        select(Recommendation).where(Recommendation.user_id == user.id)
+    ).first()
+    assert recommendation is None
+
+
+def test_stream_narrative_persists_partial_narrative_if_error_after_some_text(
+    client: TestClient, session: Session, monkeypatch
+):
+    # If real content already streamed before a later failure, keep it -
+    # better than losing genuine output and leaving the user stuck.
+    product = Product(
+        title="Python 101", description="Learn Python.", category="Dev", price=0
+    )
+    session.add(product)
+    session.commit()
+    session.refresh(product)
+
+    def partial_then_broken_stream(profile, candidates):
+        yield "Partial narrative "
+        raise RuntimeError("Mesh dropped mid-stream")
+
+    monkeypatch.setattr(
+        "app.routers.recommendations.generate_narrative_stream",
+        partial_then_broken_stream,
+    )
+    monkeypatch.setattr(
+        "app.routers.recommendations.build_profile", lambda s, u: object()
+    )
+
+    _register(client, email="partial-stream@example.com")
+    response = client.get(f"/recommendations/stream?candidate_ids={product.id}")
+    assert response.status_code == 200
+    assert "event: done" in response.text
+
+    user = session.exec(
+        select(User).where(User.email == "partial-stream@example.com")
+    ).first()
+    recommendation = session.exec(
+        select(Recommendation).where(Recommendation.user_id == user.id)
+    ).first()
+    assert recommendation is not None
+    assert recommendation.narrative == "Partial narrative "
+
+
 def test_recommendations_empty_state_links_to_catalog_categories(
     client: TestClient, session: Session
 ):

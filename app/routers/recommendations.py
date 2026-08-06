@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
@@ -17,6 +19,8 @@ from app.models.recommendation import Recommendation
 from app.models.user import User
 from app.services.auth import require_login
 from app.services.ui import category_cover
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/recommendations")
 templates = Jinja2Templates(directory="app/templates")
@@ -138,9 +142,22 @@ def stream_narrative(
 
         profile = build_profile(session, user)
         chunks: list[str] = []
-        for chunk in generate_narrative_stream(profile, candidates):
-            chunks.append(chunk)
-            yield "data: " + chunk.replace("\n", "\ndata: ") + "\n\n"
+        try:
+            for chunk in generate_narrative_stream(profile, candidates):
+                chunks.append(chunk)
+                yield "data: " + chunk.replace("\n", "\ndata: ") + "\n\n"
+        except Exception:
+            logger.exception("Narrative streaming failed for user_id=%s", user.id)
+            if not chunks:
+                # A custom event named "error" would collide with
+                # EventSource's own built-in connection-error handling
+                # (inconsistent across browsers) - "failed" keeps the two
+                # unambiguous on the client.
+                yield "event: failed\ndata: \n\n"
+                return
+            # Real content already streamed to the client before the
+            # failure - still worth persisting rather than losing it and
+            # leaving the user stuck re-generating from scratch.
 
         narrative = "".join(chunks)
         _store_recommendation(session, user, narrative, product_ids)
