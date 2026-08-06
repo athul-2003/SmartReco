@@ -162,18 +162,3 @@ def prepare_candidates(
     profile = build_profile(session, user)
     candidates = retrieve_candidates(profile)
     return profile, candidates
-
-
-def generate_recommendation(session: Session, user: User) -> tuple[str, list[int]]:
-    """Full non-streaming pipeline: behavioral profile -> Qdrant retrieval ->
-    Mesh narrative. Returns (narrative, product_ids); callers persist as
-    needed. Used by the manual refresh button; see prepare_candidates +
-    generate_narrative_stream for the streaming first-generation path."""
-    profile, candidates = prepare_candidates(session, user)
-
-    if not candidates:
-        return NO_ACTIVITY_NARRATIVE, []
-
-    narrative = generate_narrative(profile, candidates)
-    product_ids = [c["id"] for c in candidates]
-    return narrative, product_ids
