@@ -11,6 +11,27 @@ class DualWriteError(Exception):
     so the two stores never drift (FR-2.4/FR-2.5)."""
 
 
+def _embed_and_upsert(product: Product) -> None:
+    """Shared by create/update - both need the identical embed-then-upsert
+    step once the SQL side has a flushed `product.id` to use as the Qdrant
+    point ID. Raises DualWriteError (not the underlying exception) so
+    callers have one exception type to catch and roll back on."""
+    try:
+        text = build_embedding_text(product.title, product.description)
+        vector = embed_texts([text])[0]
+        vector_store.upsert_product(
+            product.id,
+            vector,
+            title=product.title,
+            category=product.category,
+            price=product.price,
+        )
+    except Exception as exc:
+        raise DualWriteError(
+            f"Failed to embed/upsert product into Qdrant: {exc}"
+        ) from exc
+
+
 def create_product(
     session: Session, *, title: str, description: str, category: str, price: float
 ) -> Product:
@@ -21,16 +42,10 @@ def create_product(
     session.flush()  # assigns product.id without committing, so Qdrant can use it as the point ID
 
     try:
-        text = build_embedding_text(title, description)
-        vector = embed_texts([text])[0]
-        vector_store.upsert_product(
-            product.id, vector, title=title, category=category, price=price
-        )
-    except Exception as exc:
+        _embed_and_upsert(product)
+    except DualWriteError:
         session.rollback()
-        raise DualWriteError(
-            f"Failed to embed/upsert product into Qdrant: {exc}"
-        ) from exc
+        raise
 
     session.commit()
     session.refresh(product)
@@ -54,16 +69,10 @@ def update_product(
     session.flush()
 
     try:
-        text = build_embedding_text(title, description)
-        vector = embed_texts([text])[0]
-        vector_store.upsert_product(
-            product.id, vector, title=title, category=category, price=price
-        )
-    except Exception as exc:
+        _embed_and_upsert(product)
+    except DualWriteError:
         session.rollback()
-        raise DualWriteError(
-            f"Failed to embed/upsert product into Qdrant: {exc}"
-        ) from exc
+        raise
 
     session.commit()
     session.refresh(product)
