@@ -6,6 +6,7 @@ changing the actual logic (analyze -> decide-to-retrieve -> evaluate ->
 refine-if-weak -> generate).
 """
 
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 
 from sqlmodel import Session, select
@@ -108,12 +109,13 @@ def retrieve_candidates(profile: BehavioralProfile, top_k: int = TOP_K) -> list[
     return vector_store.search(vector, top_k=top_k)
 
 
-def generate_narrative(profile: BehavioralProfile, candidates: list[dict]) -> str:
-    """Mesh chat generation of the persuasive narrative (FR-4.3)."""
+def _narrative_messages(
+    profile: BehavioralProfile, candidates: list[dict]
+) -> list[dict]:
     candidate_lines = "\n".join(
         f"- (id={c['id']}) {c['title']} [{c['category']}]" for c in candidates
     )
-    messages = [
+    return [
         {
             "role": "system",
             "content": (
@@ -131,20 +133,46 @@ def generate_narrative(profile: BehavioralProfile, candidates: list[dict]) -> st
             ),
         },
     ]
-    return get_llm_client().chat(messages)
+
+
+def generate_narrative(profile: BehavioralProfile, candidates: list[dict]) -> str:
+    """Mesh chat generation of the persuasive narrative (FR-4.3)."""
+    return get_llm_client().chat(_narrative_messages(profile, candidates))
+
+
+def generate_narrative_stream(
+    profile: BehavioralProfile, candidates: list[dict]
+) -> Iterator[str]:
+    """Same generation as generate_narrative, yielded incrementally so a
+    slow completion can be shown to the user as it arrives."""
+    return get_llm_client().chat_stream(_narrative_messages(profile, candidates))
+
+
+NO_ACTIVITY_NARRATIVE = (
+    "Browse a few courses and we'll start tailoring recommendations to you."
+)
+
+
+def prepare_candidates(
+    session: Session, user: User
+) -> tuple[BehavioralProfile, list[dict]]:
+    """Analyze + retrieve (FR-4.1/FR-4.2) - the fast part (~1-2s, one Mesh
+    embed call + a Qdrant query). Separated from generation so callers can
+    render grounded product cards before the slower narrative is ready."""
+    profile = build_profile(session, user)
+    candidates = retrieve_candidates(profile)
+    return profile, candidates
 
 
 def generate_recommendation(session: Session, user: User) -> tuple[str, list[int]]:
-    """Full pipeline: behavioral profile -> Qdrant retrieval -> Mesh
-    narrative. Returns (narrative, product_ids); callers persist as needed."""
-    profile = build_profile(session, user)
-    candidates = retrieve_candidates(profile)
+    """Full non-streaming pipeline: behavioral profile -> Qdrant retrieval ->
+    Mesh narrative. Returns (narrative, product_ids); callers persist as
+    needed. Used by the manual refresh button; see prepare_candidates +
+    generate_narrative_stream for the streaming first-generation path."""
+    profile, candidates = prepare_candidates(session, user)
 
     if not candidates:
-        return (
-            "Browse a few courses and we'll start tailoring recommendations to you.",
-            [],
-        )
+        return NO_ACTIVITY_NARRATIVE, []
 
     narrative = generate_narrative(profile, candidates)
     product_ids = [c["id"] for c in candidates]

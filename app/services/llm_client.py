@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from functools import lru_cache
 
 from openai import OpenAI
@@ -26,6 +27,17 @@ class LLMClient:
             model=CHAT_MODEL, messages=messages
         )
         return response.choices[0].message.content or ""
+
+    def chat_stream(self, messages: list[dict[str, str]]) -> Iterator[str]:
+        """Yields narrative text as it's generated, instead of waiting for
+        the full completion - lets a slow generation feel responsive."""
+        stream = self._client.chat.completions.create(
+            model=CHAT_MODEL, messages=messages, stream=True
+        )
+        for chunk in stream:
+            delta = chunk.choices[0].delta.content
+            if delta:
+                yield delta
 
 
 @lru_cache

@@ -28,12 +28,14 @@ def test_recommendations_shows_empty_state_for_logged_in_user(client: TestClient
     assert "Your journey starts here" in response.text
 
 
-def test_recommendations_auto_generates_on_first_visit_with_activity(
+def test_recommendations_shows_generating_page_on_first_visit_with_activity(
     client: TestClient, session: Session, monkeypatch
 ):
     # A user who has browsed (has events) but has no recommendation yet
-    # should see one generated automatically on their first visit to
-    # /recommendations - no separate "generate" button/click required.
+    # should immediately see real grounded product cards (retrieval already
+    # ran) plus a placeholder that streams in the narrative via SSE - no
+    # separate "generate" button/click, and no blocking on the full
+    # generation before anything renders.
     product = Product(
         title="Python 101", description="Learn Python.", category="Dev", price=0
     )
@@ -42,8 +44,11 @@ def test_recommendations_auto_generates_on_first_visit_with_activity(
     session.refresh(product)
 
     monkeypatch.setattr(
-        "app.routers.recommendations.generate_recommendation",
-        lambda s, u: ("Great fit for you.", [product.id]),
+        "app.routers.recommendations.prepare_candidates",
+        lambda s, u: (
+            object(),
+            [{"id": product.id, "title": product.title, "category": product.category}],
+        ),
     )
 
     _register(client, email="active-browser@example.com")
@@ -57,14 +62,85 @@ def test_recommendations_auto_generates_on_first_visit_with_activity(
 
     response = client.get("/recommendations")
     assert response.status_code == 200
-    assert "Great fit for you." in response.text
     assert "Python 101" in response.text
+    assert "Thinking about what fits you best" in response.text
+    assert f'data-candidate-ids="{product.id}"' in response.text
 
-    # And it's persisted - a second visit doesn't need to regenerate.
+    # Nothing persisted yet - only the /stream endpoint does that, once the
+    # narrative finishes generating.
     recommendations = session.exec(
         select(Recommendation).where(Recommendation.user_id == user.id)
     ).all()
-    assert len(recommendations) == 1
+    assert recommendations == []
+
+
+def test_recommendations_no_candidates_falls_back_immediately(
+    client: TestClient, session: Session, monkeypatch
+):
+    # Edge case: retrieval ran but found nothing (e.g. an empty catalog).
+    # No point offering to stream a narrative with no products - fall back
+    # straight to the stored no-activity-yet message.
+    monkeypatch.setattr(
+        "app.routers.recommendations.prepare_candidates", lambda s, u: (object(), [])
+    )
+
+    _register(client, email="no-candidates@example.com")
+    user = session.exec(
+        select(User).where(User.email == "no-candidates@example.com")
+    ).first()
+    session.add(Event(user_id=user.id, event_type=EventType.view, product_id=1))
+    session.commit()
+
+    response = client.get("/recommendations")
+    assert response.status_code == 200
+    assert "Browse a few courses" in response.text
+
+
+def test_stream_narrative_persists_recommendation(
+    client: TestClient, session: Session, monkeypatch
+):
+    product = Product(
+        title="Python 101", description="Learn Python.", category="Dev", price=0
+    )
+    session.add(product)
+    session.commit()
+    session.refresh(product)
+
+    def fake_stream(profile, candidates):
+        yield "Great "
+        yield "fit for you."
+
+    monkeypatch.setattr(
+        "app.routers.recommendations.generate_narrative_stream", fake_stream
+    )
+    monkeypatch.setattr(
+        "app.routers.recommendations.build_profile", lambda s, u: object()
+    )
+
+    _register(client, email="streamer@example.com")
+    response = client.get(f"/recommendations/stream?candidate_ids={product.id}")
+    assert response.status_code == 200
+    assert "data: Great " in response.text
+    assert "data: fit for you." in response.text
+    assert "event: done" in response.text
+
+    user = session.exec(
+        select(User).where(User.email == "streamer@example.com")
+    ).first()
+    recommendation = session.exec(
+        select(Recommendation).where(Recommendation.user_id == user.id)
+    ).first()
+    assert recommendation is not None
+    assert recommendation.narrative == "Great fit for you."
+    assert recommendation.product_ids == [product.id]
+
+
+def test_stream_narrative_requires_login(client: TestClient):
+    response = client.get(
+        "/recommendations/stream?candidate_ids=1", follow_redirects=False
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login"
 
 
 def test_recommendations_empty_state_links_to_catalog_categories(

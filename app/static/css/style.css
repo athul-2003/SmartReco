@@ -916,3 +916,12 @@ textarea {
   font-size: 1.05rem;
   line-height: 1.6;
 }
+
+.narrative-loading {
+  animation: narrative-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes narrative-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}

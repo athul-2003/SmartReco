@@ -214,6 +214,15 @@ Before starting Phase 3, per user request: set up hot reload for local dev (code
 
 Reverified live against the real stack both times: fix #1 confirmed the button appeared and worked; fix #2 confirmed a single visit (no click) now produces a real, grounded recommendation directly (~6.8s, matching the generation cost, vs. 268ms on the next visit — confirming no regeneration), and that a genuinely zero-activity user is unaffected.
 
+**Follow-up fix #3 (same day, per user feedback on fix #2):** fix #2's single visit still made the user wait ~6-7s on a blank tab with zero feedback before the page rendered at all — the auto-generate improved *whether* the user had to click, not *how it felt* to wait. User explicitly asked about streaming as an option. Implemented real narrative streaming:
+- `LLMClient.chat_stream()` (`stream=True` on the Mesh chat call, an OpenAI-compatible passthrough) yields text deltas instead of waiting for the full completion.
+- Split `agent/nodes.py`'s pipeline: `prepare_candidates()` (the fast part — one Mesh embed call + Qdrant top-K, ~1-3s) is now separable from `generate_narrative_stream()` (the slower part, now incremental). `generate_recommendation()` (used by `POST /refresh`) is unchanged, composing both in sequence as before.
+- `GET /recommendations`, on a user's first visit with activity, now runs retrieval only and renders a new `recommendations/generating.html` immediately — real grounded product cards visible right away, with a pulsing "Thinking about what fits you best…" placeholder for the narrative.
+- New `GET /recommendations/stream` (Server-Sent Events): re-derives the profile (cheap, DB-only, no Mesh call) and streams the narrative for the exact candidate IDs the page already rendered — **does not re-embed or re-query Qdrant**, avoiding a duplicate Mesh cost. `app/static/js/recommendations-stream.js` (`EventSource`, matching the `tracker.js` pattern of a dedicated static file) appends each chunk to the narrative element as it arrives, then persists via the same `_store_recommendation()` helper once the stream's `done` event fires.
+- **Scoped to the first-generation path only** — `POST /refresh` (used when a recommendation already exists, so the user has visible content and a clear "I clicked something" expectation) deliberately keeps its simple synchronous-then-redirect pattern; streaming there would need the refresh button to become JS-driven too, for a case that's less jarring to begin with.
+
+Reverified live: retrieval-only page render dropped to ~2-3s after container warm-up (down from the full ~6-7s), with real grounded product cards visible immediately; the narrative then streamed as 5 distinct SSE chunks (confirmed via raw `curl -N`, not just the browser), completing in under a second once retrieval had already run; the finished narrative persisted correctly (full text reassembled from chunks, correct `product_ids`); a follow-up visit correctly served the stored recommendation via the normal fast path, no regeneration. 51/51 tests passing.
+
 **Phase 4 status: ✅ Complete.**
 
 ---
