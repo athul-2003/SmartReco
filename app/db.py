@@ -13,6 +13,8 @@ engine = create_engine(settings.database_url, connect_args=connect_args)
 
 
 def init_db() -> None:
+    import app.models  # noqa: F401 - registers every table on SQLModel.metadata before create_all
+
     SQLModel.metadata.create_all(engine)
 
 

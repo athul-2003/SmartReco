@@ -4,19 +4,11 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import get_settings
 from app.lifespan import lifespan
-from app.observability import configure_langsmith
-from app.routers import admin, auth, catalog, events, pages, recommendations
+from app.routers import router
 
 settings = get_settings()
-configure_langsmith(settings)
 
 app = FastAPI(title="SmartReco", lifespan=lifespan)
 app.add_middleware(SessionMiddleware, secret_key=settings.session_secret)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
-
-app.include_router(pages.router)
-app.include_router(auth.router)
-app.include_router(catalog.router)
-app.include_router(admin.router)
-app.include_router(recommendations.router)
-app.include_router(events.router)
+app.include_router(router)
