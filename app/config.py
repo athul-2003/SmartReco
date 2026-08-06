@@ -20,6 +20,7 @@ class Settings(BaseSettings):
 
     langchain_tracing_v2: bool = False
     langchain_api_key: str = ""
+    langchain_project: str = "smartreco"
 
 
 @lru_cache
