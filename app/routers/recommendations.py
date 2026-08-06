@@ -79,28 +79,19 @@ def _store_recommendation(
     return recommendation
 
 
-def _render_generating(
-    request: Request, session: Session, user: User, trigger_reason: str
-) -> HTMLResponse | None:
-    """Runs retrieval (the fast part) and renders generating.html with real
-    grounded product cards plus a placeholder that streams the narrative in
-    via /stream. Returns None if retrieval found no candidates, so callers
-    can decide how to handle that (differs between first-generation and the
-    auto-regenerate trigger)."""
-    _, candidates = prepare_candidates(session, user)
-    if not candidates:
-        return None
-    candidate_ids = [c["id"] for c in candidates]
-    products = _ordered_products(session, candidate_ids)
+def _render_generating_shell(
+    request: Request, user: User, trigger_reason: str
+) -> HTMLResponse:
+    """Renders the generating page immediately, with no Mesh/Qdrant call on
+    this request. Retrieval used to block here (a real network round-trip to
+    Mesh) before anything was sent to the browser at all - now the page
+    renders instantly with a loading placeholder, and its own JS
+    (recommendations-generate.js) fetches /recommendations/candidates once
+    the page is already visible."""
     return templates.TemplateResponse(
         request,
         "recommendations/generating.html",
-        {
-            "user": user,
-            "products": products,
-            "candidate_ids": ",".join(str(pid) for pid in candidate_ids),
-            "trigger_reason": trigger_reason,
-        },
+        {"user": user, "trigger_reason": trigger_reason},
     )
 
 
@@ -108,6 +99,7 @@ def _render_generating(
 def view_recommendations(
     request: Request,
     error: str | None = None,
+    skip_regenerate: bool = False,
     user: User = Depends(require_login),
     session: Session = Depends(get_session),
 ) -> HTMLResponse:
@@ -129,37 +121,17 @@ def view_recommendations(
 
         # First visit with real behavior to draw on - always generates,
         # regardless of the event-count trigger below (there's nothing
-        # cached yet to prefer over).
-        rendered = _render_generating(request, session, user, trigger_reason="manual")
-        if rendered is not None:
-            return rendered
-        # Retrieval found no candidates at all (e.g. empty catalog) - store
-        # the no-activity narrative so this doesn't re-attempt on every
-        # visit.
-        recommendation = _store_recommendation(session, user, NO_ACTIVITY_NARRATIVE, [])
+        # cached yet to prefer over). Retrieval itself happens client-side
+        # (see /candidates below), so this renders instantly.
+        return _render_generating_shell(request, user, trigger_reason="manual")
 
-    elif should_auto_regenerate(session, user, recommendation):
-        # Enough new activity has landed since the cached recommendation
-        # to make regenerating worthwhile (FR "Efficiency" - see
-        # agent/triggers.py). Same streaming UX as first-generation.
-        try:
-            rendered = _render_generating(
-                request, session, user, trigger_reason="threshold"
-            )
-        except Exception:
-            # A Mesh/Qdrant failure here has a safe fallback available
-            # (unlike the first-generation branch above) - the still-valid
-            # cached recommendation below, so degrade to that instead of a
-            # raw 500.
-            logger.exception(
-                "Auto-regeneration retrieval failed for user_id=%s", user.id
-            )
-            rendered = None
-        if rendered is not None:
-            return rendered
-        # Retrieval came back empty (e.g. an emptied catalog) or failed -
-        # fall back to serving the still-valid cached recommendation below
-        # instead of showing nothing.
+    if not skip_regenerate and should_auto_regenerate(session, user, recommendation):
+        # Enough new activity has landed since the cached recommendation to
+        # make regenerating worthwhile (FR "Efficiency" - see
+        # agent/triggers.py). `skip_regenerate` is how /candidates breaks
+        # the loop when it already tried this and found nothing new to
+        # show - without it, this would just re-render the same shell again.
+        return _render_generating_shell(request, user, trigger_reason="threshold")
 
     ordered_products = _ordered_products(session, recommendation.product_ids)
     return templates.TemplateResponse(
@@ -172,6 +144,79 @@ def view_recommendations(
             "error": REFRESH_ERROR_MESSAGES.get(error) if error else None,
         },
     )
+
+
+@router.get("/candidates")
+def get_candidates(
+    reason: str = "manual",
+    user: User = Depends(require_login),
+    session: Session = Depends(get_session),
+) -> dict[str, object]:
+    """Runs the real retrieval (Mesh embed + Qdrant query) that the
+    generating-page shell above defers out of its own request - called by
+    that page's own JS once it's already on screen, so the network
+    round-trip no longer blocks the initial page load. `reason` is "manual"
+    (first generation) or "threshold" (auto-regenerate); it only affects
+    what happens on an empty or failed result, not the retrieval itself."""
+    trigger_reason = reason if reason in ("manual", "threshold") else "manual"
+
+    try:
+        _, candidates = prepare_candidates(session, user)
+    except Exception:
+        logger.exception(
+            "Candidate retrieval failed for user_id=%s (reason=%s)",
+            user.id,
+            trigger_reason,
+        )
+        if trigger_reason == "threshold":
+            # Safe fallback available - the still-valid cached
+            # recommendation (skip_regenerate avoids re-triggering this
+            # same failure in a loop).
+            return {
+                "status": "redirect",
+                "redirect": "/recommendations?skip_regenerate=1",
+            }
+        # First generation has no cached recommendation to fall back to -
+        # surface a clean failure state instead of a raw 500.
+        return {"status": "failed"}
+
+    if not candidates:
+        if trigger_reason == "manual":
+            # Nothing to recommend from at all (e.g. empty catalog) - store
+            # the no-activity narrative so this doesn't re-attempt on every
+            # visit.
+            _store_recommendation(session, user, NO_ACTIVITY_NARRATIVE, [])
+            return {"status": "redirect", "redirect": "/recommendations"}
+        return {
+            "status": "redirect",
+            "redirect": "/recommendations?skip_regenerate=1",
+        }
+
+    candidate_ids = [c["id"] for c in candidates]
+    products = _ordered_products(session, candidate_ids)
+    logger.info(
+        "Agent retrieved %d grounded candidate(s) for user_id=%s (reason=%s)",
+        len(products),
+        user.id,
+        trigger_reason,
+    )
+    return {
+        "status": "ok",
+        "trigger_reason": trigger_reason,
+        "candidate_ids": ",".join(str(pid) for pid in candidate_ids),
+        "candidates": [
+            {
+                "id": p.id,
+                "title": p.title,
+                "category": p.category,
+                "description": p.description,
+                "price": p.price,
+                "cover_class": category_cover(p.category)["tone_class"],
+                "cover_letter": category_cover(p.category)["letter"],
+            }
+            for p in products
+        ],
+    }
 
 
 @router.get("/stream")
@@ -222,6 +267,12 @@ def stream_narrative(
 
         narrative = "".join(chunks)
         _store_recommendation(session, user, narrative, product_ids, trigger_reason)
+        logger.info(
+            "Agent recommendation stored for user_id=%s: %d product(s), trigger=%s",
+            user.id,
+            len(product_ids),
+            trigger_reason,
+        )
         yield "event: done\ndata: \n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")

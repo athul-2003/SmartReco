@@ -5,7 +5,7 @@
   <div>
     <span class="section-eyebrow">Personalized for you</span>
     <h1>My Recommendations</h1>
-    <p class="recommendation-meta">Grounded in the courses you've already looked at.</p>
+    <p class="recommendation-meta">Finding the best-fit courses for you&hellip;</p>
   </div>
 </div>
 
@@ -19,25 +19,10 @@
   </div>
 </div>
 
-{% if products %}
-<div class="product-grid">
-  {% for product in products %}
-  {% set cover = product.category|cover %}
-  <a href="/catalog/{{ product.id }}" class="product-card" data-product-id="{{ product.id }}">
-    <div class="product-cover {{ cover.tone_class }}"><span>{{ cover.letter }}</span></div>
-    <div class="product-card-body">
-      <span class="chip">{{ product.category }}</span>
-      <h3>{{ product.title }}</h3>
-      <p class="product-description">{{ product.description }}</p>
-      <div class="product-meta">
-        <span>{{ "Free" if product.price == 0 else "₹%.2f"|format(product.price) }}</span>
-        <span>&rarr;</span>
-      </div>
-    </div>
-  </a>
-  {% endfor %}
+<div id="product-grid-container" class="generating-placeholder">
+  <span class="spinner" aria-hidden="true"></span>
+  <p>Finding your best-fit courses&hellip;</p>
 </div>
-{% endif %}
 
-<script src="/static/js/recommendations-stream.js" data-candidate-ids="{{ candidate_ids }}" data-trigger-reason="{{ trigger_reason }}" defer></script>
+<script src="/static/js/recommendations-generate.js" data-trigger-reason="{{ trigger_reason }}" defer></script>
 {% endblock %}

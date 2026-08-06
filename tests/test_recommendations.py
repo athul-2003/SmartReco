@@ -31,16 +31,44 @@ def test_recommendations_shows_empty_state_for_logged_in_user(client: TestClient
     assert "Your journey starts here" in response.text
 
 
-def test_recommendations_shows_generating_page_on_first_visit_with_activity(
+def test_recommendations_shows_generating_shell_instantly_on_first_visit(
     client: TestClient, session: Session, monkeypatch
 ):
     # A user who has browsed (has events) but has no recommendation yet
-    # should immediately see real grounded product cards (retrieval already
-    # ran) plus a placeholder that streams in the narrative via SSE - no
-    # separate "generate" button/click, and no blocking on the full
-    # generation before anything renders.
+    # should see the generating page immediately - no blocking Mesh/Qdrant
+    # call in this request at all. Retrieval happens client-side, via a
+    # separate call to /recommendations/candidates (see below).
+    def _boom(s, u):
+        raise AssertionError("retrieval should not run on the page request itself")
+
+    monkeypatch.setattr("app.routers.recommendations.prepare_candidates", _boom)
+
+    _register(client, email="active-browser@example.com")
+    user = session.exec(
+        select(User).where(User.email == "active-browser@example.com")
+    ).first()
+    session.add(Event(user_id=user.id, event_type=EventType.view, product_id=1))
+    session.commit()
+
+    response = client.get("/recommendations")
+
+    assert response.status_code == 200
+    assert "Thinking about what fits you best" in response.text
+    assert "Finding your best-fit courses" in response.text
+    assert 'data-trigger-reason="manual"' in response.text
+
+    # Nothing persisted yet - only /candidates + /stream do that.
+    recommendations = session.exec(
+        select(Recommendation).where(Recommendation.user_id == user.id)
+    ).all()
+    assert recommendations == []
+
+
+def test_candidates_returns_grounded_products_for_shell_to_render(
+    client: TestClient, session: Session, monkeypatch
+):
     product = Product(
-        title="Python 101", description="Learn Python.", category="Dev", price=0
+        title="Python 101", description="Learn Python.", category="Dev", price=499
     )
     session.add(product)
     session.commit()
@@ -54,35 +82,37 @@ def test_recommendations_shows_generating_page_on_first_visit_with_activity(
         ),
     )
 
-    _register(client, email="active-browser@example.com")
-    user = session.exec(
-        select(User).where(User.email == "active-browser@example.com")
-    ).first()
-    session.add(
-        Event(user_id=user.id, event_type=EventType.view, product_id=product.id)
-    )
-    session.commit()
+    _register(client, email="candidates@example.com")
+    response = client.get("/recommendations/candidates?reason=manual")
 
-    response = client.get("/recommendations")
     assert response.status_code == 200
-    assert "Python 101" in response.text
-    assert "Thinking about what fits you best" in response.text
-    assert f'data-candidate-ids="{product.id}"' in response.text
+    data = response.json()
+    assert data["status"] == "ok"
+    assert data["trigger_reason"] == "manual"
+    assert data["candidate_ids"] == str(product.id)
+    assert len(data["candidates"]) == 1
+    candidate = data["candidates"][0]
+    assert candidate["id"] == product.id
+    assert candidate["title"] == "Python 101"
+    assert candidate["category"] == "Dev"
+    assert candidate["price"] == 499
+    assert "cover_class" in candidate
+    assert "cover_letter" in candidate
 
-    # Nothing persisted yet - only the /stream endpoint does that, once the
-    # narrative finishes generating.
-    recommendations = session.exec(
-        select(Recommendation).where(Recommendation.user_id == user.id)
-    ).all()
-    assert recommendations == []
+
+def test_candidates_requires_login(client: TestClient):
+    response = client.get("/recommendations/candidates", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login?next=%2Frecommendations%2Fcandidates"
 
 
-def test_recommendations_no_candidates_falls_back_immediately(
+def test_candidates_no_results_stores_no_activity_narrative_for_manual(
     client: TestClient, session: Session, monkeypatch
 ):
     # Edge case: retrieval ran but found nothing (e.g. an empty catalog).
-    # No point offering to stream a narrative with no products - fall back
-    # straight to the stored no-activity-yet message.
+    # No point offering to stream a narrative with no products - store the
+    # no-activity narrative so this doesn't re-attempt on every visit, and
+    # tell the client to reload to see it.
     monkeypatch.setattr(
         "app.routers.recommendations.prepare_candidates", lambda s, u: (object(), [])
     )
@@ -94,9 +124,137 @@ def test_recommendations_no_candidates_falls_back_immediately(
     session.add(Event(user_id=user.id, event_type=EventType.view, product_id=1))
     session.commit()
 
-    response = client.get("/recommendations")
+    response = client.get("/recommendations/candidates?reason=manual")
     assert response.status_code == 200
-    assert "Browse a few courses" in response.text
+    assert response.json() == {"status": "redirect", "redirect": "/recommendations"}
+
+    recommendation = session.exec(
+        select(Recommendation).where(Recommendation.user_id == user.id)
+    ).first()
+    assert recommendation is not None
+    assert recommendation.product_ids == []
+
+    view = client.get("/recommendations")
+    assert view.status_code == 200
+    assert "Browse a few courses" in view.text
+
+
+def test_candidates_no_results_for_threshold_redirects_without_overwriting_cache(
+    client: TestClient, session: Session, monkeypatch
+):
+    # An auto-regenerate attempt that finds nothing must not touch the
+    # still-valid cached recommendation - just tell the client to reload
+    # with skip_regenerate so it doesn't loop back into the same attempt.
+    monkeypatch.setattr(
+        "app.routers.recommendations.prepare_candidates", lambda s, u: (object(), [])
+    )
+
+    _register(client, email="threshold-empty@example.com")
+    user = session.exec(
+        select(User).where(User.email == "threshold-empty@example.com")
+    ).first()
+    session.add(
+        Recommendation(user_id=user.id, narrative="Still cached.", product_ids=[])
+    )
+    session.commit()
+
+    response = client.get("/recommendations/candidates?reason=threshold")
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "redirect",
+        "redirect": "/recommendations?skip_regenerate=1",
+    }
+
+    recommendation = session.exec(
+        select(Recommendation).where(Recommendation.user_id == user.id)
+    ).first()
+    assert recommendation.narrative == "Still cached."
+
+
+def test_candidates_failure_for_manual_returns_failed_status(
+    client: TestClient, session: Session, monkeypatch
+):
+    def _boom(s, u):
+        raise RuntimeError("Mesh is down")
+
+    monkeypatch.setattr("app.routers.recommendations.prepare_candidates", _boom)
+
+    _register(client, email="candidates-fail@example.com")
+    response = client.get("/recommendations/candidates?reason=manual")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "failed"}
+
+    user = session.exec(
+        select(User).where(User.email == "candidates-fail@example.com")
+    ).first()
+    recommendations = session.exec(
+        select(Recommendation).where(Recommendation.user_id == user.id)
+    ).all()
+    assert recommendations == []
+
+
+def test_candidates_failure_for_threshold_falls_back_to_cache(
+    client: TestClient, session: Session, monkeypatch
+):
+    def _boom(s, u):
+        raise RuntimeError("Mesh is down")
+
+    monkeypatch.setattr("app.routers.recommendations.prepare_candidates", _boom)
+
+    _register(client, email="threshold-fail@example.com")
+    user = session.exec(
+        select(User).where(User.email == "threshold-fail@example.com")
+    ).first()
+    session.add(
+        Recommendation(
+            user_id=user.id, narrative="Still-valid cached narrative.", product_ids=[]
+        )
+    )
+    session.commit()
+
+    response = client.get("/recommendations/candidates?reason=threshold")
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "redirect",
+        "redirect": "/recommendations?skip_regenerate=1",
+    }
+
+    view = client.get(response.json()["redirect"])
+    assert view.status_code == 200
+    assert "Still-valid cached narrative." in view.text
+
+
+def test_skip_regenerate_serves_cache_even_past_threshold(
+    client: TestClient, session: Session, monkeypatch
+):
+    # The escape hatch /candidates uses to break the redirect loop: with
+    # skip_regenerate set, the page must serve the cache directly even
+    # though should_auto_regenerate would otherwise fire.
+    def _boom(s, u):
+        raise AssertionError("prepare_candidates should not run")
+
+    monkeypatch.setattr("app.routers.recommendations.prepare_candidates", _boom)
+
+    _register(client, email="skip-regen@example.com")
+    user = session.exec(
+        select(User).where(User.email == "skip-regen@example.com")
+    ).first()
+    session.add(
+        Recommendation(
+            user_id=user.id,
+            narrative="Cached narrative.",
+            product_ids=[],
+            created_at=datetime.now(UTC) - timedelta(minutes=5),
+        )
+    )
+    for _ in range(EVENT_THRESHOLD):
+        session.add(Event(user_id=user.id, event_type=EventType.view))
+    session.commit()
+
+    response = client.get("/recommendations?skip_regenerate=1")
+    assert response.status_code == 200
+    assert "Cached narrative." in response.text
 
 
 def test_stream_narrative_persists_recommendation(
@@ -381,21 +539,16 @@ def test_view_recommendations_serves_cache_below_event_threshold(
     assert "Cached narrative." in response.text
 
 
-def test_view_recommendations_auto_regenerates_at_event_threshold(
+def test_view_recommendations_shows_threshold_shell_instantly_at_event_threshold(
     client: TestClient, session: Session, monkeypatch
 ):
-    product = Product(title="Advanced Python", description="d", category="Dev", price=0)
-    session.add(product)
-    session.commit()
-    session.refresh(product)
+    # Past the threshold, the page still renders instantly (no blocking
+    # Mesh/Qdrant call) - it just carries trigger_reason="threshold" so the
+    # shell's JS calls /candidates?reason=threshold instead of "manual".
+    def _boom(s, u):
+        raise AssertionError("retrieval should not run on the page request itself")
 
-    monkeypatch.setattr(
-        "app.routers.recommendations.prepare_candidates",
-        lambda s, u: (
-            object(),
-            [{"id": product.id, "title": product.title, "category": product.category}],
-        ),
-    )
+    monkeypatch.setattr("app.routers.recommendations.prepare_candidates", _boom)
 
     _register(client, email="threshold@example.com")
     user = session.exec(
@@ -415,41 +568,8 @@ def test_view_recommendations_auto_regenerates_at_event_threshold(
 
     response = client.get("/recommendations")
     assert response.status_code == 200
-    assert "Advanced Python" in response.text
     assert 'data-trigger-reason="threshold"' in response.text
     assert "Stale narrative." not in response.text
-
-
-def test_view_recommendations_falls_back_to_cache_when_auto_regenerate_retrieval_fails(
-    client: TestClient, session: Session, monkeypatch
-):
-    # A Mesh/Qdrant failure during the auto-regenerate-at-threshold retrieval
-    # has a safe fallback available (the still-valid cached recommendation)
-    # - it must degrade to that, not crash the page with a raw 500.
-    def _boom(s, u):
-        raise RuntimeError("Mesh is down")
-
-    monkeypatch.setattr("app.routers.recommendations.prepare_candidates", _boom)
-
-    _register(client, email="threshold-fails@example.com")
-    user = session.exec(
-        select(User).where(User.email == "threshold-fails@example.com")
-    ).first()
-    session.add(
-        Recommendation(
-            user_id=user.id,
-            narrative="Still-valid cached narrative.",
-            product_ids=[],
-            created_at=datetime.now(UTC) - timedelta(minutes=5),
-        )
-    )
-    for _ in range(EVENT_THRESHOLD):
-        session.add(Event(user_id=user.id, event_type=EventType.view))
-    session.commit()
-
-    response = client.get("/recommendations")
-    assert response.status_code == 200
-    assert "Still-valid cached narrative." in response.text
 
 
 def test_stream_narrative_persists_threshold_trigger_reason(
