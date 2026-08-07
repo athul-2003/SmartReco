@@ -7,6 +7,7 @@ real Session, without needing to run the actual APScheduler loop (per
 CLAUDE.md's testing bar for this phase).
 """
 
+import logging
 from html import escape
 
 from sqlmodel import Session, select
@@ -18,6 +19,8 @@ from app.models.product import Product
 from app.models.user import User
 from app.services.email import send_email
 from app.services.ui import category_cover
+
+logger = logging.getLogger(__name__)
 
 DIGEST_SUBJECT = "Your SmartReco picks for today"
 
@@ -163,16 +166,29 @@ def render_digest_email_html(
 def run_daily_digest(session: Session) -> int:
     """Runs the pipeline for every active user and emails a digest. Returns
     the number of digests actually sent (users with no grounded
-    recommendations are skipped, not emailed an empty one)."""
+    recommendations are skipped, not emailed an empty one).
+
+    Logs progress per user (INFO) - each iteration runs a real LangGraph
+    pipeline (Mesh + Qdrant calls), so a run across many users can take a
+    while; without this, both the scheduled job's logs and a manual
+    `make digest` run would show nothing at all until the very end."""
     base_url = get_settings().public_base_url
+    user_ids = _active_user_ids(session)
+    total = len(user_ids)
     sent = 0
-    for user_id in _active_user_ids(session):
+    for index, user_id in enumerate(user_ids, start=1):
         user = session.get(User, user_id)
         if user is None:
             continue
 
         narrative, product_ids = run_recommendation_graph(session, user)
         if not product_ids:
+            logger.info(
+                "Digest %d/%d: skipping user_id=%s (no grounded candidates)",
+                index,
+                total,
+                user_id,
+            )
             continue
 
         products = _ordered_products(session, product_ids)
@@ -180,5 +196,13 @@ def run_daily_digest(session: Session) -> int:
         html_body = render_digest_email_html(narrative, products, base_url)
         send_email(user.email, DIGEST_SUBJECT, body, html_body=html_body)
         sent += 1
+        logger.info(
+            "Digest %d/%d: sent to %s (%d product(s))",
+            index,
+            total,
+            user.email,
+            len(product_ids),
+        )
 
+    logger.info("Digest complete: %d/%d email(s) sent", sent, total)
     return sent
