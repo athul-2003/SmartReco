@@ -1,29 +1,65 @@
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
-from sqlmodel import Session, select
+from sqlmodel import Session, func, select
 
 from app.db import get_session
 from app.models.product import Product
 from app.models.user import User
 from app.services import catalog
 from app.services.auth import require_admin
+from app.services.products_query import filtered_statement, page_numbers
 from app.services.ui import category_cover
 
 router = APIRouter(prefix="/admin/products")
 templates = Jinja2Templates(directory="app/templates")
 templates.env.filters["cover"] = category_cover
 
+PAGE_SIZE = 24
+
 
 @router.get("", response_class=HTMLResponse)
 def list_products(
     request: Request,
+    q: str = "",
+    category: str = "",
+    page: int = 1,
     user: User = Depends(require_admin),
     session: Session = Depends(get_session),
 ) -> HTMLResponse:
-    products = session.exec(select(Product).order_by(Product.id.desc())).all()
+    base_statement = filtered_statement(q, category)
+
+    total_count = session.exec(
+        select(func.count()).select_from(base_statement.subquery())
+    ).one()
+    total_pages = max((total_count + PAGE_SIZE - 1) // PAGE_SIZE, 1)
+    page = min(max(page, 1), total_pages)
+
+    products = session.exec(
+        base_statement.order_by(Product.id.desc())
+        .offset((page - 1) * PAGE_SIZE)
+        .limit(PAGE_SIZE)
+    ).all()
+
+    categories = session.exec(
+        select(Product.category).distinct().order_by(Product.category)
+    ).all()
+
     return templates.TemplateResponse(
-        request, "admin/products_list.html", {"user": user, "products": products}
+        request,
+        "admin/products_list.html",
+        {
+            "user": user,
+            "products": products,
+            "categories": categories,
+            "q": q,
+            "selected_category": category,
+            "page": page,
+            "total_pages": total_pages,
+            "total_count": total_count,
+            "page_size": PAGE_SIZE,
+            "page_numbers": page_numbers(page, total_pages),
+        },
     )
 
 
