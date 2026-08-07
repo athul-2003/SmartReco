@@ -15,15 +15,7 @@ It is deliberately **not** a static "related products" widget:
 - It generates a short, persuasive narrative explaining *why* the recommendation fits this specific user, plus the specific recommended products.
 - Recommendations are stored, shown on the site, and refresh as behavior evolves — and can optionally be pushed proactively as a scheduled email digest.
 
-Every AI call (embeddings + chat generation) is routed through **Mesh API**, an OpenAI-compatible LLM gateway — this is the hackathon's mandatory, make-or-break requirement.
-
-## Scope
-
-| | |
-|---|---|
-| **In scope** | Email/password auth with two roles (user, admin); admin product management with dual-write to the relational DB *and* the vector DB, kept in sync; efficient non-blocking behavioral event tracking; an agentic RAG recommendation engine routed entirely through Mesh API; storage and display of refreshable recommendations; production-minded triggering and caching of AI calls. |
-| **Bonus (committed)** | A structured **LangGraph** agent workflow; scheduled proactive email digests via **APScheduler**; end-to-end observability via **LangSmith**; retrieval polish via metadata filtering. |
-| **Out of scope** | Payment processing, real course content delivery/streaming, multi-tenant organizations, mobile-native apps, social features. |
+Every AI call (embeddings + chat generation) is routed through **Mesh API**, an OpenAI-compatible LLM gateway — this is the hackathon's mandatory, make-or-break requirement. All four of the hackathon's optional bonuses are implemented: a structured **LangGraph** agent workflow, scheduled proactive email digests via **APScheduler**, end-to-end observability via **LangSmith**, and retrieval polish via Qdrant metadata filtering — see the Functional Requirements table below for the full breakdown.
 
 ## Architecture
 
