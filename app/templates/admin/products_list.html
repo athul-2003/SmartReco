@@ -51,7 +51,7 @@
         <td>{{ "Free" if product.price == 0 else "₹%.2f"|format(product.price) }}</td>
         <td class="admin-table-actions">
           <a href="/admin/products/{{ product.id }}/edit" class="icon-btn" title="Edit" aria-label="Edit {{ product.title }}">
-            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><polygon points="9,2 15,2 15,15 12,21 9,15" transform="rotate(45 12 12)" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><polygon points="9,2 15,2 15,15 12,21 9,15" transform="rotate(45 12 12)" fill="currentColor"/></svg>
           </a>
           <form action="/admin/products/{{ product.id }}/delete" method="post" class="inline-form" onsubmit="return confirm('Delete {{ product.title }}?');">
             <button type="submit" class="icon-btn icon-btn-danger" title="Delete" aria-label="Delete {{ product.title }}">
