@@ -180,6 +180,7 @@ smartreco/
     mesh_spike.py               # Phase 0 connectivity check (throwaway)
     seed_catalog.py              # load scripts/data/courses.csv -> SQLite + Qdrant
     create_admin.py               # interactive admin bootstrap (make create-admin)
+    run_digest.py                   # manual digest trigger (make digest)
     data/courses.csv               # committed, CC0-1.0 seed dataset
   tests/                       # pytest, mocks Mesh/Qdrant, isolated in-memory DB
   docs/
@@ -246,15 +247,9 @@ Once the stack is up and seeded, this is the fastest path to watching the full b
 2. Browse a few courses — open 2-3 product detail pages, try a search. Each of these is a real tracked event (view/search/click/dwell), sent by `static/js/tracker.js` in the background.
 3. Click **My Recommendations** in the nav. On this first visit, the page shows real, grounded product cards immediately (Qdrant retrieval, ~1-2s) while the persuasive narrative streams in live underneath (Mesh chat completion via Server-Sent Events).
 4. Revisit the page — it now loads instantly from the cached recommendation, with zero additional Mesh/Qdrant calls, until either you click **Refresh Recommendations** or 5 more tracked events accumulate (see FR-5).
-5. *(Bonus, optional)* To see the scheduled email digest without waiting for its daily trigger, set `SMTP_HOST=mailhog`/`SMTP_PORT=1025` in `.env` (see below), then manually invoke the job the same pipeline uses for testing:
+5. *(Bonus, optional)* To see the scheduled email digest without waiting for its daily trigger, set `SMTP_HOST=mailhog`/`SMTP_PORT=1025` in `.env` (see below), then run:
    ```bash
-   docker compose exec app uv run --no-sync python -c "
-   from app.db import engine
-   from sqlmodel import Session
-   from app.services.digest import run_daily_digest
-   with Session(engine) as session:
-       print('digests sent:', run_daily_digest(session))
-   "
+   make digest
    ```
    Then open http://localhost:8025 — the digest email (HTML + plain-text) will be there, with clickable links back into the app.
 
