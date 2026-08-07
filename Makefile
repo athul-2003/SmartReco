@@ -1,4 +1,4 @@
-.PHONY: help install build up up-build down logs ps seed create-admin test lint fmt clean prod-build prod-up prod-down
+.PHONY: help install build up up-build down logs ps seed create-admin digest test lint fmt clean prod-build prod-up prod-down
 
 help:
 	@echo "SmartReco - available commands:"
@@ -12,6 +12,7 @@ help:
 	@echo "  make ps            Show status of the running stack"
 	@echo "  make seed          Seed the catalog (DB + Qdrant) - run after 'make up'/'make up-build'"
 	@echo "  make create-admin  Interactively create (or promote) an admin user - the only way to get one"
+	@echo "  make digest        Manually trigger the daily email digest job (bonus - see .env.example)"
 	@echo ""
 	@echo "  Production (no bind mounts, no --reload - docker-compose.yml only):"
 	@echo "  make prod-build    Build the app image for production"
@@ -67,6 +68,9 @@ seed:
 
 create-admin:
 	docker compose exec app uv run --no-sync python scripts/create_admin.py
+
+digest:
+	docker compose exec app uv run --no-sync python scripts/run_digest.py
 
 test:
 	uv run pytest -v
