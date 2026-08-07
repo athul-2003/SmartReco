@@ -1,3 +1,5 @@
+import logging
+
 from sqlmodel import Session
 
 from app.models.event import Event, EventType
@@ -61,6 +63,53 @@ def test_run_daily_digest_skips_users_with_no_grounded_recommendations(
 
     assert count == 0
     assert sent_to == []
+
+
+def test_run_daily_digest_logs_progress_per_sent_email(
+    session: Session, monkeypatch, caplog
+):
+    # Each user runs a real LangGraph pipeline (Mesh + Qdrant calls), so a
+    # digest run across many users takes a while - without this, a manual
+    # `make digest` run (or the real scheduled job) shows nothing at all
+    # until the very end, indistinguishable from a hang.
+    user = _make_user(session, "progress@example.com")
+    session.add(Event(user_id=user.id, event_type=EventType.view))
+    session.commit()
+
+    product = Product(title="Python 101", description="d", category="Dev", price=0)
+    session.add(product)
+    session.commit()
+    session.refresh(product)
+
+    monkeypatch.setattr(
+        digest,
+        "run_recommendation_graph",
+        lambda s, u: ("Great picks.", [product.id]),
+    )
+    monkeypatch.setattr(digest, "send_email", lambda *a, **kw: None)
+
+    with caplog.at_level(logging.INFO, logger="app.services.digest"):
+        count = digest.run_daily_digest(session)
+
+    assert count == 1
+    assert "1/1: sent to progress@example.com" in caplog.text
+    assert "Digest complete: 1/1" in caplog.text
+
+
+def test_run_daily_digest_logs_skip_for_no_grounded_candidates(
+    session: Session, monkeypatch, caplog
+):
+    user = _make_user(session)
+    session.add(Event(user_id=user.id, event_type=EventType.view))
+    session.commit()
+
+    monkeypatch.setattr(digest, "run_recommendation_graph", lambda s, u: ("x", []))
+
+    with caplog.at_level(logging.INFO, logger="app.services.digest"):
+        count = digest.run_daily_digest(session)
+
+    assert count == 0
+    assert f"skipping user_id={user.id}" in caplog.text
 
 
 def test_render_digest_email_includes_narrative_and_products():
