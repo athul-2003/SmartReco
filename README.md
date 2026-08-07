@@ -146,17 +146,22 @@ Seeding (`scripts/seed_catalog.py`) batches embeddings (~100 inputs per Mesh cal
 ```
 smartreco/
   app/
-    main.py                    # FastAPI app factory, lifespan (init_db, scheduler), routers
+    main.py                    # FastAPI app factory - middleware, static files, routers
+    lifespan.py                  # startup/shutdown hooks: logging, LangSmith, init_db, scheduler
+    logging_config.py             # root logger format/level, called once from lifespan
     config.py                  # pydantic-settings; reads .env
     db.py                      # SQLModel engine/session (SQLAlchemy under the hood)
-    scheduler.py                # APScheduler daily digest job (BackgroundScheduler)
+    scheduler.py                # APScheduler daily digest job (persistent job store)
     observability.py            # LangSmith tracing env-var wiring for the LangGraph pipeline
     models/                     # SQLModel tables
+      __init__.py                 # imports every table so create_all() registers them all
       user.py                     # users (email, password_hash, role)
       product.py                  # products (catalog items, also the Qdrant point ID)
       event.py                    # events (behavioral tracking)
       recommendation.py           # recommendations (narrative, product_ids, trigger_reason)
-    routers/                    # request handling — auth, catalog, admin, events, pages, recommendations
+    routers/
+      __init__.py                 # aggregates every router - main.py includes just this one
+      auth.py / catalog.py / admin.py / events.py / pages.py / recommendations.py
     services/
       auth.py                     # password hashing, session dependencies, safe_next_path
       catalog.py                   # dual-write orchestration (SQL + Qdrant, rollback on failure)
@@ -245,7 +250,7 @@ Once the stack is up and seeded, this is the fastest path to watching the full b
 
 1. Register a new account at `/register` and you'll land on `/catalog`.
 2. Browse a few courses — open 2-3 product detail pages, try a search. Each of these is a real tracked event (view/search/click/dwell), sent by `static/js/tracker.js` in the background.
-3. Click **My Recommendations** in the nav. On this first visit, the page shows real, grounded product cards immediately (Qdrant retrieval, ~1-2s) while the persuasive narrative streams in live underneath (Mesh chat completion via Server-Sent Events).
+3. Click **My Recommendations** in the nav. The page loads instantly with a loading placeholder (no blocking network call in the request itself) - real, grounded product cards then appear as soon as retrieval finishes in the background, while the persuasive narrative streams in live underneath (Mesh chat completion via Server-Sent Events).
 4. Revisit the page — it now loads instantly from the cached recommendation, with zero additional Mesh/Qdrant calls, until either you click **Refresh Recommendations** or 5 more tracked events accumulate (see FR-5).
 5. *(Bonus, optional)* To see the scheduled email digest without waiting for its daily trigger, set `SMTP_HOST=mailhog`/`SMTP_PORT=1025` in `.env` (see below), then run:
    ```bash
