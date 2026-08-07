@@ -1723,29 +1723,35 @@ body:has(.auth-shell) .footer {
   align-items: center;
 }
 
-.admin-table-actions a {
-  font-weight: 600;
-  text-decoration: none;
-  font-size: 0.88rem;
-}
-
-.admin-table-actions a:hover {
-  text-decoration: underline;
-}
-
-.admin-table-actions form button {
-  background: none;
-  border: none;
-  color: var(--error);
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--outline-variant);
+  background: var(--surface-container-lowest);
+  color: var(--on-surface-variant);
   cursor: pointer;
-  font: inherit;
-  font-weight: 600;
-  font-size: 0.88rem;
   padding: 0;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
-.admin-table-actions form button:hover {
-  text-decoration: underline;
+.icon-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.icon-btn:hover {
+  background: var(--surface-container-low);
+  color: var(--primary);
+  border-color: var(--outline);
+}
+
+.icon-btn-danger:hover {
+  color: var(--error);
+  border-color: var(--error);
 }
 
 .cover-0 { background: linear-gradient(135deg, var(--cover-0-bg-a), var(--cover-0-bg-b)); color: var(--cover-0-fg); }

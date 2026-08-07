@@ -27,14 +27,15 @@ def get_current_user(
     return session.get(User, user_id)
 
 
-def safe_next_path(next: str | None) -> str:
+def safe_next_path(next: str | None, default: str = "/catalog") -> str:
     """Only ever redirect to a same-site relative path - a `next` value like
     `//evil.com` or `https://evil.com` would otherwise make login/register
-    an open redirect. Falls back to `/catalog` (the normal post-login
-    landing page) for anything else, including a missing value."""
+    an open redirect. Falls back to `default` (the normal post-login
+    landing page - `/catalog` for a regular user, `/admin` for an admin,
+    decided by the caller) for anything else, including a missing value."""
     if next and next.startswith("/") and not next.startswith("//"):
         return next
-    return "/catalog"
+    return default
 
 
 def require_login(
