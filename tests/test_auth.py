@@ -21,6 +21,13 @@ def test_safe_next_path_rejects_absolute_and_protocol_relative_urls():
     assert safe_next_path("javascript:alert(1)") == "/catalog"
 
 
+def test_safe_next_path_uses_custom_default():
+    assert safe_next_path(None, default="/admin") == "/admin"
+    assert safe_next_path("//evil.example.com", default="/admin") == "/admin"
+    # An explicit valid next still wins over a custom default.
+    assert safe_next_path("/recommendations", default="/admin") == "/recommendations"
+
+
 def register(
     client: TestClient, email: str = "user@example.com", password: str = "hunter22"
 ):
@@ -106,6 +113,73 @@ def test_admin_route_allowed_for_admin_user(client: TestClient, session: Session
     response = client.get("/admin")
     assert response.status_code == 200
     assert "Course Management" in response.text
+
+
+def test_login_lands_admin_on_dashboard_by_default(
+    client: TestClient, session: Session
+):
+    register(client, email="admin-login@example.com")
+    user = session.exec(
+        select(User).where(User.email == "admin-login@example.com")
+    ).first()
+    user.role = Role.admin
+    session.add(user)
+    session.commit()
+    client.post("/logout", follow_redirects=False)
+
+    response = client.post(
+        "/login",
+        data={"email": "admin-login@example.com", "password": "hunter22"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/admin"
+
+
+def test_login_still_respects_next_for_admin(client: TestClient, session: Session):
+    # The role-based default only applies when there's no explicit next -
+    # an admin following a login-gated link should still land there.
+    register(client, email="admin-next@example.com")
+    user = session.exec(
+        select(User).where(User.email == "admin-next@example.com")
+    ).first()
+    user.role = Role.admin
+    session.add(user)
+    session.commit()
+    client.post("/logout", follow_redirects=False)
+
+    response = client.post(
+        "/login",
+        data={
+            "email": "admin-next@example.com",
+            "password": "hunter22",
+            "next": "/recommendations",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/recommendations"
+
+
+def test_home_redirects_admin_to_dashboard(client: TestClient, session: Session):
+    register(client, email="admin-home@example.com")
+    user = session.exec(
+        select(User).where(User.email == "admin-home@example.com")
+    ).first()
+    user.role = Role.admin
+    session.add(user)
+    session.commit()
+
+    response = client.get("/", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/admin"
+
+
+def test_home_redirects_regular_user_to_catalog(client: TestClient):
+    register(client)
+    response = client.get("/", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/catalog"
 
 
 def test_login_redirects_to_next_after_success(client: TestClient):

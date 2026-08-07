@@ -4,7 +4,7 @@ from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
 
 from app.db import get_session
-from app.models.user import User
+from app.models.user import Role, User
 from app.services.auth import (
     get_current_user,
     hash_password,
@@ -88,8 +88,10 @@ def login(
         )
 
     request.session["user_id"] = user.id
+    default_landing = "/admin" if user.role == Role.admin else "/catalog"
     return RedirectResponse(
-        url=safe_next_path(next), status_code=status.HTTP_303_SEE_OTHER
+        url=safe_next_path(next, default=default_landing),
+        status_code=status.HTTP_303_SEE_OTHER,
     )
 
 

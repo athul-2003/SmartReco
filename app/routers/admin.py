@@ -18,6 +18,12 @@ templates.env.filters["cover"] = category_cover
 PAGE_SIZE = 24
 
 
+def _all_categories(session: Session) -> list[str]:
+    return session.exec(
+        select(Product.category).distinct().order_by(Product.category)
+    ).all()
+
+
 @router.get("", response_class=HTMLResponse)
 def list_products(
     request: Request,
@@ -41,17 +47,13 @@ def list_products(
         .limit(PAGE_SIZE)
     ).all()
 
-    categories = session.exec(
-        select(Product.category).distinct().order_by(Product.category)
-    ).all()
-
     return templates.TemplateResponse(
         request,
         "admin/products_list.html",
         {
             "user": user,
             "products": products,
-            "categories": categories,
+            "categories": _all_categories(session),
             "q": q,
             "selected_category": category,
             "page": page,
@@ -65,12 +67,19 @@ def list_products(
 
 @router.get("/new", response_class=HTMLResponse)
 def new_product_form(
-    request: Request, user: User = Depends(require_admin)
+    request: Request,
+    user: User = Depends(require_admin),
+    session: Session = Depends(get_session),
 ) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "admin/product_form.html",
-        {"user": user, "product": None, "mode": "create"},
+        {
+            "user": user,
+            "product": None,
+            "mode": "create",
+            "categories": _all_categories(session),
+        },
     )
 
 
@@ -106,6 +115,7 @@ def create_product(
                 },
                 "mode": "create",
                 "error": str(exc),
+                "categories": _all_categories(session),
             },
             status_code=status.HTTP_502_BAD_GATEWAY,
         )
@@ -134,7 +144,12 @@ def edit_product_form(
     return templates.TemplateResponse(
         request,
         "admin/product_form.html",
-        {"user": user, "product": product, "mode": "edit"},
+        {
+            "user": user,
+            "product": product,
+            "mode": "edit",
+            "categories": _all_categories(session),
+        },
     )
 
 
@@ -174,6 +189,7 @@ def update_product(
                 },
                 "mode": "edit",
                 "error": str(exc),
+                "categories": _all_categories(session),
             },
             status_code=status.HTTP_502_BAD_GATEWAY,
         )

@@ -125,6 +125,33 @@ def test_edit_nonexistent_product_404s(client: TestClient, session: Session):
     assert response.status_code == 404
 
 
+def test_new_product_form_offers_existing_categories_as_a_dropdown(
+    client: TestClient, session: Session
+):
+    # A free-text category field lets typos fragment the catalog (e.g.
+    # "Development" vs "Devlopment" become two different categories) -
+    # the dropdown constrains input to categories that actually exist.
+    _register_and_promote(client, session)
+    _add_product(session, title="Existing Course", category="Lifestyle")
+
+    response = client.get("/admin/products/new")
+    assert response.status_code == 200
+    assert "<select" in response.text
+    assert '<option value="Lifestyle"' in response.text
+
+
+def test_edit_product_form_preselects_current_category(
+    client: TestClient, session: Session
+):
+    _register_and_promote(client, session)
+    product = _add_product(session, title="Existing Course", category="Lifestyle")
+    _add_product(session, title="Other Course", category="Dev")
+
+    response = client.get(f"/admin/products/{product.id}/edit")
+    assert response.status_code == 200
+    assert '<option value="Lifestyle" selected>' in response.text
+
+
 def test_list_products_search_filters_by_query(client: TestClient, session: Session):
     _register_and_promote(client, session)
     _add_product(session, title="Python Basics", category="Dev")
