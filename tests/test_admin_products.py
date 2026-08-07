@@ -19,6 +19,21 @@ def _register_and_promote(
     session.commit()
 
 
+def _add_product(session: Session, **kwargs) -> Product:
+    defaults = {
+        "title": "Sample Course",
+        "description": "A sample.",
+        "category": "Dev",
+        "price": 0.0,
+    }
+    defaults.update(kwargs)
+    product = Product(**defaults)
+    session.add(product)
+    session.commit()
+    session.refresh(product)
+    return product
+
+
 def test_non_admin_cannot_access_product_admin(client: TestClient):
     client.post(
         "/register",
@@ -108,3 +123,39 @@ def test_edit_nonexistent_product_404s(client: TestClient, session: Session):
     _register_and_promote(client, session)
     response = client.get("/admin/products/99999/edit")
     assert response.status_code == 404
+
+
+def test_list_products_search_filters_by_query(client: TestClient, session: Session):
+    _register_and_promote(client, session)
+    _add_product(session, title="Python Basics", category="Dev")
+    _add_product(session, title="Yoga for Beginners", category="Lifestyle")
+
+    response = client.get("/admin/products", params={"q": "Python"})
+    assert "Python Basics" in response.text
+    assert "Yoga for Beginners" not in response.text
+
+
+def test_list_products_filters_by_category(client: TestClient, session: Session):
+    _register_and_promote(client, session)
+    _add_product(session, title="Python Basics", category="Dev")
+    _add_product(session, title="Yoga for Beginners", category="Lifestyle")
+
+    response = client.get("/admin/products", params={"category": "Lifestyle"})
+    assert "Yoga for Beginners" in response.text
+    assert "Python Basics" not in response.text
+
+
+def test_list_products_paginates(client: TestClient, session: Session, monkeypatch):
+    _register_and_promote(client, session)
+    monkeypatch.setattr("app.routers.admin.PAGE_SIZE", 1)
+    _add_product(session, title="Course A", category="Dev")
+    _add_product(session, title="Course B", category="Dev")
+
+    first_page = client.get("/admin/products")
+    assert first_page.status_code == 200
+    assert "Showing 1" in first_page.text
+    assert 'aria-label="Course management pages"' in first_page.text
+
+    second_page = client.get("/admin/products", params={"page": 2})
+    assert second_page.status_code == 200
+    assert "Showing 2" in second_page.text

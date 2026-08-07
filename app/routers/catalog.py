@@ -2,12 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, func, select
-from sqlmodel.sql.expression import SelectOfScalar
 
 from app.db import get_session
 from app.models.product import Product
 from app.models.user import User
 from app.services.auth import get_current_user
+from app.services.products_query import filtered_statement, page_numbers
 from app.services.ui import category_cover
 
 router = APIRouter(prefix="/catalog")
@@ -25,34 +25,6 @@ SORT_OPTIONS = {
 }
 
 
-def _page_numbers(page: int, total_pages: int) -> list[int | None]:
-    """Truncated page list for pagination controls, e.g. [1, None, 4, 5, 6, None, 63]."""
-    if total_pages <= 7:
-        return list(range(1, total_pages + 1))
-    keep = {1, total_pages, page - 1, page, page + 1}
-    keep = sorted(p for p in keep if 1 <= p <= total_pages)
-    result: list[int | None] = []
-    previous = None
-    for p in keep:
-        if previous is not None and p - previous > 1:
-            result.append(None)
-        result.append(p)
-        previous = p
-    return result
-
-
-def _filtered_statement(q: str, category: str) -> SelectOfScalar[Product]:
-    statement = select(Product)
-    if q:
-        like = f"%{q}%"
-        statement = statement.where(
-            Product.title.ilike(like) | Product.description.ilike(like)
-        )
-    if category:
-        statement = statement.where(Product.category == category)
-    return statement
-
-
 @router.get("", response_class=HTMLResponse)
 def browse(
     request: Request,
@@ -64,7 +36,7 @@ def browse(
     session: Session = Depends(get_session),
 ) -> HTMLResponse:
     sort = sort if sort in SORT_OPTIONS else "recommended"
-    base_statement = _filtered_statement(q, category)
+    base_statement = filtered_statement(q, category)
 
     total_count = session.exec(
         select(func.count()).select_from(base_statement.subquery())
@@ -98,7 +70,7 @@ def browse(
             "total_pages": total_pages,
             "total_count": total_count,
             "page_size": PAGE_SIZE,
-            "page_numbers": _page_numbers(page, total_pages),
+            "page_numbers": page_numbers(page, total_pages),
         },
     )
 
