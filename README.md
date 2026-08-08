@@ -17,6 +17,34 @@ It is deliberately **not** a static "related products" widget:
 
 Every AI call (embeddings + chat generation) is routed through **Mesh API**, an OpenAI-compatible LLM gateway — this is the hackathon's mandatory, make-or-break requirement. All four of the hackathon's optional bonuses are implemented: a structured **LangGraph** agent workflow, scheduled proactive email digests via **APScheduler**, end-to-end observability via **LangSmith**, and retrieval polish via Qdrant metadata filtering — see the Functional Requirements table below for the full breakdown.
 
+## Screenshots
+
+**Sign in / register** — email + password, no admin option on the public form by design.
+
+![Login](docs/screenshots/login.png)
+![Register](docs/screenshots/register.png)
+
+**Catalog** — the real seeded catalog (1,500 courses), searchable and filterable by category.
+
+![Catalog](docs/screenshots/catalog.png)
+
+**My Recommendations** — a persuasive narrative grounded in this specific user's real behavior, plus the specific courses it's recommending.
+
+![My Recommendations](docs/screenshots/recommendations.png)
+
+**Daily digest email** — the same pipeline, delivered proactively (bonus FR-6). Caught locally via MailHog for this screenshot; a real SMTP relay is a one-line env var change.
+
+![Digest email — narrative](docs/screenshots/digest-email-narrative.png)
+![Digest email — recommended courses](docs/screenshots/digest-email-courses.png)
+
+**Admin dashboard** — live catalog/user/recommendation/event counts.
+
+![Admin dashboard](docs/screenshots/admin-dashboard.png)
+
+**Manage Courses** — searchable, filterable, paginated course management; every create/edit/delete dual-writes to SQL and Qdrant.
+
+![Manage Courses](docs/screenshots/admin-course-management.png)
+
 ## Architecture
 
 SmartReco is a **self-contained, monolithic** web application by design — a single FastAPI backend serves server-rendered pages, exposes JSON APIs for tracking/recommendations, owns the relational database, and coordinates with an external vector database and the Mesh API gateway. Fewer moving parts means faster solo delivery, an easy clone-and-run experience for reviewers, and fewer ways for a live demo to break.
